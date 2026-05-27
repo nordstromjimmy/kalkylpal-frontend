@@ -150,6 +150,7 @@ export default function BatchResultsModal({
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          padding: "12px 12px",
         }}
       >
         {/* ── Modal header ── */}
