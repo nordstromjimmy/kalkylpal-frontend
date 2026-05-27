@@ -2,10 +2,12 @@
  * ComponentPanel.jsx — Right panel.
  *
  * Features:
- *  - Search field + Scan button
+ *  - Search field + scan button
+ *  - Clear button to reset scan results entirely
  *  - Component list grouped by base_code, with variant breakdown
  *  - Click a component to highlight only that type on the drawing
- *  - Manual add: enter a code + count for components missed by scanner
+ *  - Toggle to show/hide all highlight boxes
+ *  - Manual add: enter a code + count for components missed by the scanner
  *  - Warnings section
  *
  * Props:
@@ -15,10 +17,12 @@
  *   highlightCode  — which base_code is highlighted in the viewer
  *   loading        — bool, is a scan in progress
  *   onScan         — callback(searchCode) → triggers scan
- *   onHighlight    — callback(base_code | null) → set/clear highlight
- *   onManualAdd    — callback({ code, base_code, count, page }) → add manual item
+ *   onClearScan    — callback() → resets scan results back to empty state
+ *   onHighlight    — callback(base_code | null | "__none__") → set/clear highlight
+ *   onManualAdd    — callback({ code, base_code, page }) → add manual item
  */
 import { useState } from "react";
+import BatchScanSection from "./BatchScanSection";
 
 export default function ComponentPanel({
   drawingId = null,
@@ -27,8 +31,15 @@ export default function ComponentPanel({
   highlightCode = null,
   loading = false,
   onScan,
+  onClearScan,
   onHighlight,
   onManualAdd,
+  projectName = "Projekt",
+  projectDrawings = [],
+  batchState = null,
+  onBatchScan,
+  onBatchAbort,
+  onSelectDrawing,
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [showManualForm, setShowManualForm] = useState(false);
@@ -45,17 +56,22 @@ export default function ComponentPanel({
     onScan(searchInput.trim());
   }
 
+  function handleClear() {
+    setSearchInput("");
+    setExpandedGroups({});
+    onHighlight(null);
+    onClearScan();
+  }
+
   function handleManualAdd() {
     if (!manualCode.trim()) return;
     const count = parseInt(manualCount) || 1;
     const page = parseInt(manualPage) || 1;
-    // Add `count` manual entries
     for (let i = 0; i < count; i++) {
       onManualAdd({
         code: manualCode.trim().toUpperCase(),
         base_code: manualCode.trim().toUpperCase().split(/[-/]/)[0],
         page,
-        // Manual items have no position — show them in a list, not on the drawing
         x0: null,
         y0: null,
         x1: null,
@@ -70,19 +86,33 @@ export default function ComponentPanel({
   const components = scanResult?.components || {};
   const warnings = scanResult?.warnings || [];
   const sortedGroups = Object.keys(components).sort();
-
-  // Total count including manual additions
   const autoTotal = scanResult?.total_found || 0;
   const manualTotal = manualItems?.length || 0;
   const grandTotal = autoTotal + manualTotal;
+  const hasResults = scanResult !== null;
+
+  // Button label for the show/hide all toggle
+  function toggleLabel() {
+    if (highlightCode === "__none__") return "Visa alla";
+    if (highlightCode) return "Visa alla";
+    return "Dölj alla";
+  }
+
+  function handleToggleHighlight() {
+    if (highlightCode === "__none__" || highlightCode) {
+      onHighlight(null);
+    } else {
+      onHighlight("__none__");
+    }
+  }
 
   return (
     <div className="component-panel">
-      {/* ── Stats ── */}
+      {/* ── Sammanfattning ── */}
       <div className="panel-section">
         <div className="panel-label">Sammanfattning</div>
         <div className="stat-row">
-          <span className="stat-label">Automatiskt upptäckta</span>
+          <span className="stat-label">Automatiskt hittade</span>
           <span className="stat-value">{autoTotal}</span>
         </div>
         <div className="stat-row">
@@ -101,7 +131,7 @@ export default function ComponentPanel({
             className="stat-label"
             style={{ fontWeight: 600, color: "var(--text-primary)" }}
           >
-            Total
+            Totalt
           </span>
           <span className="stat-value" style={{ fontSize: 24 }}>
             {grandTotal}
@@ -109,31 +139,52 @@ export default function ComponentPanel({
         </div>
       </div>
 
-      {/* ── Search & Scan ── */}
+      {/* ── Sök och skanna ── */}
       <div className="panel-section">
-        <div className="panel-label">Scanna ritning</div>
+        <div className="panel-label">Skanna ritning</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input
             className="input"
-            placeholder="Filter: TD201, RL1…"
+            placeholder="Filtrera: TD201, RL1…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleScan()}
           />
         </div>
-        <button
-          className="btn btn-amber btn-full"
-          onClick={handleScan}
-          disabled={loading || !drawingId}
-        >
-          {loading ? (
-            <>
-              <div className="spinner" /> Scannar..
-            </>
-          ) : (
-            "▶ Starta sökning"
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            onClick={handleScan}
+            disabled={loading || !drawingId}
+          >
+            {loading ? (
+              <>
+                <div className="spinner" /> Skannar…
+              </>
+            ) : (
+              "▶ Kör skanning"
+            )}
+          </button>
+          {hasResults && (
+            <button
+              className="btn btn-ghost"
+              onClick={handleClear}
+              title="Rensa resultat"
+            >
+              Rensa
+            </button>
           )}
-        </button>
+        </div>
+        {/* ── Projektskanning ── */}
+        <BatchScanSection
+          projectName={projectName}
+          projectDrawings={projectDrawings}
+          batchState={batchState}
+          onBatchScan={onBatchScan}
+          onBatchAbort={onBatchAbort}
+          onSelectDrawing={onSelectDrawing}
+        />
         {searchInput && (
           <div
             style={{
@@ -143,13 +194,13 @@ export default function ComponentPanel({
               fontFamily: "var(--font-mono)",
             }}
           >
-            Filtrera efter "{searchInput.toUpperCase()}" — rensa för att scanna
+            Filtrerar på "{searchInput.toUpperCase()}" — rensa för att skanna
             allt
           </div>
         )}
       </div>
 
-      {/* ── Scroll area: component list + manual additions + warnings ── */}
+      {/* ── Scroll area ── */}
       <div className="panel-scroll">
         {/* Component list */}
         {sortedGroups.length > 0 && (
@@ -165,15 +216,13 @@ export default function ComponentPanel({
               <div className="panel-label" style={{ marginBottom: 0 }}>
                 Hittade komponenter
               </div>
-              {highlightCode && (
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: 10, padding: "3px 8px" }}
-                  onClick={() => onHighlight(null)}
-                >
-                  Visa alla
-                </button>
-              )}
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 10, padding: "3px 8px" }}
+                onClick={handleToggleHighlight}
+              >
+                {toggleLabel()}
+              </button>
             </div>
 
             {sortedGroups.map((base_code) => {
@@ -181,7 +230,6 @@ export default function ComponentPanel({
               const isExpanded = expandedGroups[base_code];
               const isHighlighted = highlightCode === base_code;
 
-              // Group variants by full code
               const variants = instances.reduce((acc, inst) => {
                 acc[inst.code] = (acc[inst.code] || 0) + 1;
                 return acc;
@@ -225,11 +273,11 @@ export default function ComponentPanel({
               fontFamily: "var(--font-mono)",
             }}
           >
-            Välj en ritning och starta en sökning
+            Välj en ritning och kör en skanning
           </div>
         )}
 
-        {drawingId && sortedGroups.length === 0 && !loading && (
+        {drawingId && !hasResults && !loading && (
           <div
             style={{
               padding: 16,
@@ -238,11 +286,11 @@ export default function ComponentPanel({
               fontFamily: "var(--font-mono)",
             }}
           >
-            Inga komponenter har hittats
+            Inga komponenter hittade ännu — kör en skanning
           </div>
         )}
 
-        {/* Manual additions list */}
+        {/* Manuellt tillagda */}
         {manualItems?.length > 0 && (
           <>
             <div style={{ padding: "10px 16px 4px" }}>
@@ -250,7 +298,7 @@ export default function ComponentPanel({
                 className="panel-label"
                 style={{ marginBottom: 0, color: "var(--green)" }}
               >
-                Tillagda manuellt
+                Manuellt tillagda
               </div>
             </div>
             {manualItems.map((m, i) => (
@@ -261,14 +309,14 @@ export default function ComponentPanel({
               >
                 <span>+ {m.code}</span>
                 <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-                  p.{m.page}
+                  s.{m.page}
                 </span>
               </div>
             ))}
           </>
         )}
 
-        {/* Warnings */}
+        {/* Varningar */}
         {warnings.length > 0 && (
           <>
             <div style={{ padding: "10px 16px 4px" }}>
@@ -276,7 +324,7 @@ export default function ComponentPanel({
                 className="panel-label"
                 style={{ marginBottom: 0, color: "var(--red)" }}
               >
-                ⚠ Verifiera manuellt ({warnings.length})
+                ⚠ Kontrollera manuellt ({warnings.length})
               </div>
             </div>
             {warnings.map((w, i) => (
@@ -284,7 +332,7 @@ export default function ComponentPanel({
                 <span className="warning-dot">▸</span>
                 <div className="warning-text">
                   <span className="warning-code">{w.fragment}</span>
-                  {" — label may be obscured on page "}
+                  {" — etiketten kan vara dold på sida "}
                   {w.page}
                 </div>
               </div>
@@ -293,14 +341,14 @@ export default function ComponentPanel({
         )}
       </div>
 
-      {/* ── Manual Add ── */}
+      {/* ── Lägg till manuellt ── */}
       <div
         className="panel-section"
         style={{ borderTop: "1px solid var(--border)", borderBottom: "none" }}
       >
         {!showManualForm ? (
           <button
-            className="btn btn-full"
+            className="btn btn-green btn-full"
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
@@ -309,11 +357,11 @@ export default function ComponentPanel({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div className="panel-label" style={{ marginBottom: 0 }}>
-              Lägg till komponent
+              Lägg till manuellt
             </div>
             <input
               className="input"
-              placeholder="T.ex TD201-160"
+              placeholder="Kod, t.ex. TD201-160"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
@@ -329,7 +377,7 @@ export default function ComponentPanel({
                     fontFamily: "var(--font-mono)",
                   }}
                 >
-                  Antal
+                  ANTAL
                 </div>
                 <input
                   className="input"
@@ -348,7 +396,7 @@ export default function ComponentPanel({
                     fontFamily: "var(--font-mono)",
                   }}
                 >
-                  Sida
+                  SIDA
                 </div>
                 <input
                   className="input"
@@ -361,7 +409,7 @@ export default function ComponentPanel({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                className="btn"
+                className="btn btn-green"
                 style={{ flex: 1 }}
                 onClick={handleManualAdd}
               >

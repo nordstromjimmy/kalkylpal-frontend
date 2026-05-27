@@ -1,33 +1,25 @@
 /**
- * DrawingViewer.jsx — Center panel: PDF page image + highlight overlay.
+ * DrawingViewer.jsx — Center panel: PDF page with highlight overlay.
  *
- * How the highlight positioning works:
- *   - Backend renders the PDF page as a PNG image at 150 DPI
- *   - Component coordinates (x0,y0,x1,y1) are in PDF points (72 DPI base)
- *   - To position highlights as percentages, divide by the PDF page dimensions:
- *       left%   = x0 / pageWidth  * 100
- *       top%    = y0 / pageHeight * 100
- *       width%  = (x1-x0) / pageWidth  * 100
- *       height% = (y1-y0) / pageHeight * 100
- *   - The zoom/DPI factor cancels out — only page dimensions matter.
+ * Zoom & pan:
+ *   - Scroll wheel     → zoom in/out centered on mouse position
+ *   - Left mouse drag  → pan
+ *   - Double click     → reset zoom and position
  *
- * Props:
- *   drawingId     — currently selected drawing id
- *   pageNumber    — which page to show (1-indexed)
- *   pageCount     — total pages in drawing
- *   pageDimensions— { width, height } of PDF page in points (from backend)
- *   components    — array of component instances to highlight
- *   warnings      — array of truncation warnings
- *   manualItems   — array of manually added items { code, x0, y0, x1, y1, page }
- *   highlightCode — which base_code is currently selected (highlighted in amber)
- *   onPageChange  — callback(newPageNumber)
+ * Highlight positioning:
+ *   Coordinates from backend (x0,y0,x1,y1) are in PDF points.
+ *   We convert them to percentages of the page size:
+ *     left%   = x0 / pageWidth  * 100
+ *     top%    = y0 / pageHeight * 100
+ *   The zoom/DPI factor cancels out — only page dimensions matter.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getPageImageUrl } from "../api";
 
-// How much padding to add around each highlight box (in % of page dimension).
-// Makes small labels easier to click.
 const BOX_PADDING_PCT = 0.3;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 6;
+const ZOOM_STEP = 0.12;
 
 export default function DrawingViewer({
   drawingId = null,
@@ -39,14 +31,98 @@ export default function DrawingViewer({
   manualItems = [],
   highlightCode = null,
   onPageChange,
+  onPrevDrawing = null,
+  onNextDrawing = null,
+  hasPrevDrawing = false,
+  hasNextDrawing = false,
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [hoveredBox, setHoveredBox] = useState(null); // { code, x, y }
+  const [hoveredBox, setHoveredBox] = useState(null);
 
-  // Reset image-loaded state when the drawing or page changes
+  // ── Zoom & pan state ──────────────────────────────────────────────────────
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
+  const panOrigin = useRef({ x: 0, y: 0 });
+  const containerRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  // Reset zoom/pan when drawing or page changes
   useEffect(() => {
     setImageLoaded(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   }, [drawingId, pageNumber]);
+
+  // ── Scroll → zoom centered on mouse position ──────────────────────────────
+  const handleWheel = useCallback(
+    (e) => {
+      e.preventDefault();
+
+      const container = containerRef.current;
+      const wrap = wrapRef.current;
+      if (!container || !wrap) return;
+
+      const rect = wrap.getBoundingClientRect();
+
+      // Mouse position relative to the transformed element
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const delta = e.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * delta));
+      const zoomRatio = newZoom / zoom;
+
+      // Adjust pan so the point under the mouse stays fixed after zoom
+      setPan((prev) => ({
+        x: mouseX - zoomRatio * (mouseX - prev.x),
+        y: mouseY - zoomRatio * (mouseY - prev.y),
+      }));
+      setZoom(newZoom);
+    },
+    [zoom],
+  );
+
+  // Attach wheel listener with passive: false so we can call preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
+  // ── Mouse down → start panning ────────────────────────────────────────────
+  function handleMouseDown(e) {
+    if (e.button !== 0) return;
+    isPanning.current = true;
+    panStart.current = { x: e.clientX, y: e.clientY };
+    panOrigin.current = { ...pan };
+    e.currentTarget.style.cursor = "grabbing";
+  }
+
+  function handleMouseMove(e) {
+    if (!isPanning.current) return;
+    const dx = e.clientX - panStart.current.x;
+    const dy = e.clientY - panStart.current.y;
+    setPan({ x: panOrigin.current.x + dx, y: panOrigin.current.y + dy });
+  }
+
+  function handleMouseUp(e) {
+    isPanning.current = false;
+    e.currentTarget.style.cursor = "grab";
+  }
+
+  function handleMouseLeave(e) {
+    isPanning.current = false;
+    e.currentTarget.style.cursor = "grab";
+  }
+
+  // ── Double click → reset view ─────────────────────────────────────────────
+  function handleDoubleClick() {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }
 
   if (!drawingId) {
     return (
@@ -55,7 +131,7 @@ export default function DrawingViewer({
           <div className="viewer-empty-icon">📐</div>
           <div>Välj en ritning för att börja</div>
           <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
-            Ladda upp ritningar till vänster
+            Ladda upp PDF-filer via sidopanelen
           </div>
         </div>
       </div>
@@ -68,10 +144,6 @@ export default function DrawingViewer({
     height: 1,
   };
 
-  /**
-   * Converts PDF point coordinates to CSS percentage strings.
-   * The small padding makes narrow text labels easier to see and click.
-   */
   function toStyle(x0, y0, x1, y1) {
     const pad = BOX_PADDING_PCT;
     return {
@@ -82,149 +154,216 @@ export default function DrawingViewer({
     };
   }
 
-  // Only show components on the current page
   const visibleComponents = components.filter((c) => c.page === pageNumber);
   const visibleWarnings = warnings.filter((w) => w.page === pageNumber);
-  const visibleManual = (manualItems || []).filter(
-    (m) => m.page === pageNumber,
-  );
+  const visibleManual = manualItems.filter((m) => m.page === pageNumber);
+  const zoomPct = Math.round(zoom * 100);
 
   return (
     <div className="viewer">
-      {/* Toolbar with page navigation */}
+      {/* ── Toolbar ── */}
       <div className="viewer-toolbar">
         <button
           className="btn btn-ghost"
-          disabled={pageNumber <= 1}
-          onClick={() => onPageChange(pageNumber - 1)}
+          disabled={!hasPrevDrawing}
+          onClick={onPrevDrawing}
+          title="Föregående ritning"
         >
           ← Föregående
         </button>
         <button
           className="btn btn-ghost"
-          disabled={pageNumber >= pageCount}
-          onClick={() => onPageChange(pageNumber + 1)}
+          disabled={!hasNextDrawing}
+          onClick={onNextDrawing}
+          title="Nästa ritning"
         >
           Nästa →
         </button>
+
+        {/* Zoom controls */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginLeft: 8,
+          }}
+        >
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 8px" }}
+            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.15))}
+          >
+            −
+          </button>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              minWidth: 40,
+              textAlign: "center",
+            }}
+          >
+            {zoomPct}%
+          </span>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 8px" }}
+            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.15))}
+          >
+            +
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 8px", fontSize: 10 }}
+            title="Återställ vy"
+            onClick={handleDoubleClick}
+          >
+            ↺
+          </button>
+          <span
+            style={{ color: "var(--text-dim)", marginLeft: 8, fontSize: 10 }}
+          >
+            Dubbelklick = återställ zoom
+          </span>
+        </div>
+
         <span className="viewer-page-info">
-          Sida {pageNumber} / {pageCount || "?"}
-          {" · "}
-          {visibleComponents.length} Komponenter
+          {visibleComponents.length} komponenter
           {visibleWarnings.length > 0 && (
             <span style={{ color: "var(--red)", marginLeft: 6 }}>
-              ⚠ {visibleWarnings.length} warning
-              {visibleWarnings.length > 1 ? "s" : ""}
+              ⚠ {visibleWarnings.length} varning
+              {visibleWarnings.length > 1 ? "ar" : ""}
             </span>
           )}
         </span>
       </div>
 
-      {/* Drawing + overlay */}
-      <div className="drawing-wrap">
-        {/* Loading indicator while image fetches */}
-        {!imageLoaded && (
+      {/* Loading spinner — centered in the viewer area, outside the drawing wrap */}
+      {!imageLoaded && (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "var(--bg-1)",
-              minWidth: 400,
-              minHeight: 300,
-            }}
-          >
-            <div className="spinner" />
-          </div>
-        )}
+            className="spinner"
+            style={{ width: 32, height: 32, borderWidth: 3 }}
+          />
+        </div>
+      )}
 
-        <img
-          src={imageUrl}
-          alt={`Drawing page ${pageNumber}`}
-          onLoad={() => setImageLoaded(true)}
-          style={{ display: imageLoaded ? "block" : "none" }}
-        />
+      {/* ── Zoom/pan container ── */}
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          width: "100%",
+          cursor: "grab",
+          userSelect: "none",
+          display: imageLoaded ? "block" : "none",
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onDoubleClick={handleDoubleClick}
+      >
+        {/* Transformed layer — zoom + pan applied here */}
+        <div
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "0 0",
+            display: "inline-block",
+            padding: 24,
+          }}
+        >
+          <div className="drawing-wrap" ref={wrapRef} style={{ margin: 0 }}>
+            <img
+              src={imageUrl}
+              alt={`Ritning sida ${pageNumber}`}
+              onLoad={() => setImageLoaded(true)}
+              style={{ display: "block", pointerEvents: "none" }}
+              draggable={false}
+            />
 
-        {imageLoaded && pageDimensions && (
-          <div className="highlight-layer">
-            {/* ── Detected component highlights ── */}
-            {visibleComponents.map((c, i) => {
-              const isActive = !highlightCode || c.base_code === highlightCode;
-              return (
-                <div
-                  key={`det-${i}`}
-                  className="highlight-box detected"
-                  style={{
-                    ...toStyle(c.x0, c.y0, c.x1, c.y1),
-                    opacity: isActive ? 1 : 0.2,
-                  }}
-                  onMouseEnter={() =>
-                    setHoveredBox({
-                      code: c.code,
-                      raw: c.raw_text,
-                      index: `det-${i}`,
-                    })
-                  }
-                  onMouseLeave={() => setHoveredBox(null)}
-                >
-                  {hoveredBox?.index === `det-${i}` && (
-                    <div className="highlight-tooltip">
-                      {c.raw_text !== c.code
-                        ? `${c.raw_text} → ${c.code}`
-                        : c.code}
+            {imageLoaded && pageDimensions && (
+              <div className="highlight-layer">
+                {/* Detected components */}
+                {visibleComponents.map((c, i) => {
+                  const isActive =
+                    highlightCode !== "__none__" &&
+                    (!highlightCode || c.base_code === highlightCode);
+                  return (
+                    <div
+                      key={`det-${i}`}
+                      className="highlight-box detected"
+                      style={{
+                        ...toStyle(c.x0, c.y0, c.x1, c.y1),
+                        opacity: isActive ? 1 : 0.15,
+                      }}
+                      onMouseEnter={() => setHoveredBox({ index: `det-${i}` })}
+                      onMouseLeave={() => setHoveredBox(null)}
+                    >
+                      {hoveredBox?.index === `det-${i}` && (
+                        <div className="highlight-tooltip">
+                          {c.raw_text !== c.code
+                            ? `${c.raw_text} → ${c.code}`
+                            : c.code}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
 
-            {/* ── Warning highlights (truncated/broken labels) ── */}
-            {visibleWarnings.map((w, i) => (
-              <div
-                key={`warn-${i}`}
-                className="highlight-box warning"
-                style={toStyle(w.x0, w.y0, w.x1, w.y1)}
-                onMouseEnter={() =>
-                  setHoveredBox({ code: `⚠ ${w.fragment}`, index: `warn-${i}` })
-                }
-                onMouseLeave={() => setHoveredBox(null)}
-              >
-                {hoveredBox?.index === `warn-${i}` && (
+                {/* Warnings */}
+                {visibleWarnings.map((w, i) => (
                   <div
-                    className="highlight-tooltip"
-                    style={{ color: "var(--red)" }}
+                    key={`warn-${i}`}
+                    className="highlight-box warning"
+                    style={toStyle(w.x0, w.y0, w.x1, w.y1)}
+                    onMouseEnter={() => setHoveredBox({ index: `warn-${i}` })}
+                    onMouseLeave={() => setHoveredBox(null)}
                   >
-                    ⚠ Possible truncated label: {w.fragment}
+                    {hoveredBox?.index === `warn-${i}` && (
+                      <div
+                        className="highlight-tooltip"
+                        style={{ color: "var(--red)" }}
+                      >
+                        ⚠ Möjlig trunkerad etikett: {w.fragment}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                ))}
 
-            {/* ── Manually added component highlights ── */}
-            {visibleManual.map((m, i) => (
-              <div
-                key={`man-${i}`}
-                className="highlight-box manual"
-                style={toStyle(m.x0, m.y0, m.x1, m.y1)}
-                onMouseEnter={() =>
-                  setHoveredBox({ code: `+ ${m.code}`, index: `man-${i}` })
-                }
-                onMouseLeave={() => setHoveredBox(null)}
-              >
-                {hoveredBox?.index === `man-${i}` && (
+                {/* Manually added */}
+                {visibleManual.map((m, i) => (
                   <div
-                    className="highlight-tooltip"
-                    style={{ color: "var(--green)" }}
+                    key={`man-${i}`}
+                    className="highlight-box manual"
+                    style={toStyle(m.x0, m.y0, m.x1, m.y1)}
+                    onMouseEnter={() => setHoveredBox({ index: `man-${i}` })}
+                    onMouseLeave={() => setHoveredBox(null)}
                   >
-                    + Manual: {m.code}
+                    {hoveredBox?.index === `man-${i}` && (
+                      <div
+                        className="highlight-tooltip"
+                        style={{ color: "var(--green)" }}
+                      >
+                        + Manuell: {m.code}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

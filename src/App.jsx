@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar";
 import DrawingViewer from "./components/DrawingViewer";
 import ComponentPanel from "./components/ComponentPanel";
@@ -28,6 +28,9 @@ export default function App() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [batchState, setBatchState] = useState(null);
+  // Abort flag — set to true to stop the batch loop after the current drawing
+  const batchAbortRef = useRef(false);
 
   useEffect(() => {
     loadProjects();
@@ -79,12 +82,24 @@ export default function App() {
     try {
       await uploadDrawing(selectedProject.id, file);
       setSelectedProject(await getProject(selectedProject.id));
-      showStatus(`${file.name} uppladdad`);
+      showStatus(`${file.name} uploaded`);
     } catch {
       showStatus("Upload failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handlePrevDrawing() {
+    const drawings = selectedProject?.drawings || [];
+    const idx = drawings.findIndex((d) => d.id === selectedDrawing?.id);
+    if (idx > 0) handleSelectDrawing(drawings[idx - 1]);
+  }
+
+  function handleNextDrawing() {
+    const drawings = selectedProject?.drawings || [];
+    const idx = drawings.findIndex((d) => d.id === selectedDrawing?.id);
+    if (idx < drawings.length - 1) handleSelectDrawing(drawings[idx + 1]);
   }
 
   async function handleDeleteProject(project) {
@@ -161,6 +176,62 @@ export default function App() {
     setManualItems((prev) => [...prev, item]);
   }
 
+  async function handleBatchScan(drawingIds, codes) {
+    batchAbortRef.current = false;
+    setBatchState({
+      status: "running",
+      codes,
+      progress: { current: 0, total: drawingIds.length },
+      currentFile: "",
+      results: {},
+    });
+
+    const results = {};
+
+    for (let i = 0; i < drawingIds.length; i++) {
+      // Check abort flag before each drawing
+      if (batchAbortRef.current) break;
+
+      const drawing = selectedProject.drawings.find(
+        (d) => d.id === drawingIds[i],
+      );
+      const filename = drawing?.filename ?? `Ritning ${drawingIds[i]}`;
+
+      setBatchState((prev) => ({
+        ...prev,
+        progress: { current: i + 1, total: drawingIds.length },
+        currentFile: filename,
+      }));
+
+      // Scan each code separately (reuses existing endpoint)
+      const counts = {};
+      let total = 0;
+      for (const code of codes) {
+        if (batchAbortRef.current) break;
+        try {
+          const res = await scanDrawing(drawingIds[i], code);
+          counts[code] = res.total_found;
+          total += res.total_found;
+        } catch {
+          counts[code] = 0;
+        }
+      }
+
+      results[drawingIds[i]] = { filename, counts, total };
+    }
+
+    setBatchState((prev) => ({
+      ...prev,
+      status: batchAbortRef.current ? "done" : "done",
+      results,
+    }));
+  }
+
+  function handleBatchAbort() {
+    batchAbortRef.current = true;
+    setBatchState((prev) => (prev ? { ...prev, status: "done" } : null));
+  }
+
   function showStatus(msg) {
     setStatusMsg(msg);
     setTimeout(() => setStatusMsg(""), 3500);
@@ -178,6 +249,7 @@ export default function App() {
             KALKYL<span>PAL</span>
           </span>
           <div className="topbar-sep" />
+          <span className="topbar-sub">VVS Component Scanner</span>
           {statusMsg && (
             <>
               <div className="topbar-sep" />
@@ -216,6 +288,18 @@ export default function App() {
           manualItems={manualItems}
           highlightCode={highlightCode}
           onPageChange={setPageNumber}
+          onPrevDrawing={handlePrevDrawing}
+          onNextDrawing={handleNextDrawing}
+          hasPrevDrawing={(() => {
+            const d = selectedProject?.drawings || [];
+            const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+            return i > 0;
+          })()}
+          hasNextDrawing={(() => {
+            const d = selectedProject?.drawings || [];
+            const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+            return i >= 0 && i < d.length - 1;
+          })()}
         />
 
         <ComponentPanel
@@ -225,6 +309,17 @@ export default function App() {
           highlightCode={highlightCode}
           loading={loading}
           onScan={handleScan}
+          onClearScan={() => {
+            setScanResult(null);
+            setManualItems([]);
+            setHighlightCode(null);
+          }}
+          projectName={selectedProject?.name || "Projekt"}
+          projectDrawings={selectedProject?.drawings || []}
+          batchState={batchState}
+          onBatchScan={handleBatchScan}
+          onBatchAbort={handleBatchAbort}
+          onSelectDrawing={handleSelectDrawing}
           onHighlight={setHighlightCode}
           onManualAdd={handleManualAdd}
         />
@@ -236,10 +331,10 @@ export default function App() {
           onClick={() => setShowNewProjectModal(false)}
         >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Nytt Projekt</div>
+            <div className="modal-title">// New Project</div>
             <input
               className="input"
-              placeholder="Projektnamn"
+              placeholder="Project name"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
@@ -247,7 +342,7 @@ export default function App() {
             />
             <input
               className="input"
-              placeholder="Beskrivning (frivilligt)"
+              placeholder="Description (optional)"
               value={newProjectDesc}
               onChange={(e) => setNewProjectDesc(e.target.value)}
             />
@@ -256,10 +351,10 @@ export default function App() {
                 className="btn btn-ghost"
                 onClick={() => setShowNewProjectModal(false)}
               >
-                Avbryt
+                Cancel
               </button>
               <button className="btn btn-amber" onClick={handleCreateProject}>
-                Skapa
+                Create
               </button>
             </div>
           </div>
