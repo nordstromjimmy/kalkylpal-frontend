@@ -101,7 +101,7 @@ export default function ComponentPanel({
             className="stat-label"
             style={{ fontWeight: 600, color: "var(--text-primary)" }}
           >
-            Totalt
+            Total
           </span>
           <span className="stat-value" style={{ fontSize: 24 }}>
             {grandTotal}
@@ -128,7 +128,7 @@ export default function ComponentPanel({
         >
           {loading ? (
             <>
-              <div className="spinner" /> Scanning…
+              <div className="spinner" /> Scannar..
             </>
           ) : (
             "▶ Starta sökning"
@@ -190,14 +190,11 @@ export default function ComponentPanel({
               return (
                 <div key={base_code} className="comp-group">
                   <div
-                    className="comp-group-header"
                     onClick={() => {
                       toggleGroup(base_code);
                       onHighlight(isHighlighted ? null : base_code);
                     }}
-                    style={
-                      isHighlighted ? { background: "var(--amber-glow)" } : {}
-                    }
+                    className={`comp-group-header${isHighlighted ? " is-highlighted" : ""}`}
                   >
                     <span className="comp-group-name">{base_code}</span>
                     <span className="comp-group-count">{instances.length}</span>
@@ -241,7 +238,7 @@ export default function ComponentPanel({
               fontFamily: "var(--font-mono)",
             }}
           >
-            No components found yet — run a scan
+            Inga komponenter har hittats
           </div>
         )}
 
@@ -253,7 +250,7 @@ export default function ComponentPanel({
                 className="panel-label"
                 style={{ marginBottom: 0, color: "var(--green)" }}
               >
-                Manual Additions
+                Tillagda manuellt
               </div>
             </div>
             {manualItems.map((m, i) => (
@@ -279,7 +276,7 @@ export default function ComponentPanel({
                 className="panel-label"
                 style={{ marginBottom: 0, color: "var(--red)" }}
               >
-                ⚠ Verify Manually ({warnings.length})
+                ⚠ Verifiera manuellt ({warnings.length})
               </div>
             </div>
             {warnings.map((w, i) => (
@@ -303,7 +300,7 @@ export default function ComponentPanel({
       >
         {!showManualForm ? (
           <button
-            className="btn btn-green btn-full"
+            className="btn btn-full"
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
@@ -312,11 +309,11 @@ export default function ComponentPanel({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div className="panel-label" style={{ marginBottom: 0 }}>
-              Add Manual Component
+              Lägg till komponent
             </div>
             <input
               className="input"
-              placeholder="Code, e.g. TD201-160"
+              placeholder="T.ex TD201-160"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
@@ -332,7 +329,7 @@ export default function ComponentPanel({
                     fontFamily: "var(--font-mono)",
                   }}
                 >
-                  COUNT
+                  Antal
                 </div>
                 <input
                   className="input"
@@ -351,7 +348,7 @@ export default function ComponentPanel({
                     fontFamily: "var(--font-mono)",
                   }}
                 >
-                  PAGE
+                  Sida
                 </div>
                 <input
                   className="input"
@@ -364,17 +361,17 @@ export default function ComponentPanel({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                className="btn btn-green"
+                className="btn"
                 style={{ flex: 1 }}
                 onClick={handleManualAdd}
               >
-                Add
+                Lägg till
               </button>
               <button
                 className="btn btn-ghost"
                 onClick={() => setShowManualForm(false)}
               >
-                Cancel
+                Avbryt
               </button>
             </div>
           </div>

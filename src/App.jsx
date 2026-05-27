@@ -79,7 +79,7 @@ export default function App() {
     try {
       await uploadDrawing(selectedProject.id, file);
       setSelectedProject(await getProject(selectedProject.id));
-      showStatus(`${file.name} uploaded`);
+      showStatus(`${file.name} uppladdad`);
     } catch {
       showStatus("Upload failed");
     } finally {
@@ -178,7 +178,6 @@ export default function App() {
             KALKYL<span>PAL</span>
           </span>
           <div className="topbar-sep" />
-          <span className="topbar-sub">VVS Component Scanner</span>
           {statusMsg && (
             <>
               <div className="topbar-sep" />

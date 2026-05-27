@@ -3,25 +3,31 @@
 
 /* ─── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --bg-0: #080c14; /* deepest background */
-  --bg-1: #0d1321; /* main panels */
-  --bg-2: #111827; /* elevated panels */
-  --bg-3: #1a2236; /* hover / active */
+  --bg-0: #080c14;
+  --bg-1: #0d1321;
+  --bg-2: #111827;
+  --bg-3: #1a2236;
   --border: #1f2d45;
   --border-bright: #2d4060;
 
-  --text-primary: #d4dff0;
-  --text-secondary: #6b8099;
+  --text-primary: #ffffff;
+  --text-secondary: #8ba4be;
   --text-dim: #3d5268;
 
-  --amber: #f5a623; /* primary highlight — detected components */
-  --amber-dim: rgba(245, 166, 35, 0.15);
-  --amber-glow: rgba(245, 166, 35, 0.08);
-  --blue: #4a9eff; /* interactive / selected */
-  --blue-dim: rgba(74, 158, 255, 0.15);
+  /* UI chrome — white tones */
+  --ui-white: #ffffff;
+  --ui-white-dim: rgba(255, 255, 255, 0.08);
+  --ui-white-hover: rgba(255, 255, 255, 0.12);
+  --ui-white-active: rgba(255, 255, 255, 0.06);
+
+  /* Amber — ONLY for highlight boxes on the drawing canvas */
+  --amber: #f5a623;
+  --amber-dim: rgba(245, 166, 35, 0.18);
+  --amber-glow: rgba(245, 166, 35, 0.07);
+
   --green: #3ecf8e; /* manual additions */
   --green-dim: rgba(62, 207, 142, 0.15);
-  --red: #f56565; /* warnings */
+  --red: #f56565; /* warnings / destructive */
   --red-dim: rgba(245, 101, 101, 0.12);
 
   --font-ui: "IBM Plex Sans", sans-serif;
@@ -145,18 +151,18 @@ body::before {
   font-size: 12.5px;
 }
 .sidebar-item:hover {
-  background: var(--bg-3);
-  color: var(--text-primary);
+  background: var(--ui-white-hover);
+  color: var(--ui-white);
 }
 .sidebar-item.active {
-  background: var(--amber-dim);
-  color: var(--amber);
-  border-left: 2px solid var(--amber);
+  background: var(--ui-white-dim);
+  color: var(--ui-white);
+  border-left: 2px solid var(--ui-white);
   padding-left: 14px;
 }
 .sidebar-item-icon {
   width: 14px;
-  opacity: 0.6;
+  opacity: 0.5;
   flex-shrink: 0;
 }
 .sidebar-scroll {
@@ -180,13 +186,25 @@ body::before {
   transition: all 0.15s;
   white-space: nowrap;
 }
+/* Primary action — solid white, dark text */
+.btn-primary {
+  background: var(--ui-white);
+  color: #0d1321;
+  border-color: var(--ui-white);
+}
+.btn-primary:hover {
+  background: #e8edf5;
+  border-color: #e8edf5;
+}
+/* Keep btn-amber as alias so existing code doesn't break */
 .btn-amber {
-  background: var(--amber);
-  color: #000;
-  border-color: var(--amber);
+  background: var(--ui-white);
+  color: #0d1321;
+  border-color: var(--ui-white);
 }
 .btn-amber:hover {
-  background: #ffb733;
+  background: #e8edf5;
+  border-color: #e8edf5;
 }
 .btn-ghost {
   background: transparent;
@@ -194,14 +212,14 @@ body::before {
   border-color: var(--border);
 }
 .btn-ghost:hover {
-  background: var(--bg-3);
-  color: var(--text-primary);
+  background: var(--ui-white-hover);
+  color: var(--ui-white);
   border-color: var(--border-bright);
 }
 .btn-green {
   background: var(--green-dim);
   color: var(--green);
-  border-color: var(--green);
+  border-color: rgba(62, 207, 142, 0.4);
 }
 .btn-green:hover {
   background: rgba(62, 207, 142, 0.25);
@@ -211,7 +229,7 @@ body::before {
   justify-content: center;
 }
 .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -229,7 +247,8 @@ body::before {
   transition: border-color 0.15s;
 }
 .input:focus {
-  border-color: var(--amber);
+  border-color: var(--border-bright);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
 }
 .input::placeholder {
   color: var(--text-dim);
@@ -291,7 +310,8 @@ body::before {
   max-width: 100%;
   height: auto;
 }
-/* Highlight boxes overlaid on the drawing */
+
+/* Highlight boxes — amber stays here, this is the drawing canvas not UI chrome */
 .highlight-layer {
   position: absolute;
   inset: 0;
@@ -330,7 +350,7 @@ body::before {
   padding: 4px 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--amber);
+  color: var(--ui-white);
   white-space: nowrap;
   pointer-events: none;
   z-index: 100;
@@ -345,7 +365,7 @@ body::before {
   overflow: hidden;
 }
 .panel-section {
-  padding: 34px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 .panel-label {
@@ -375,22 +395,28 @@ body::before {
   transition: background 0.1s;
 }
 .comp-group-header:hover {
-  background: var(--bg-3);
+  background: var(--ui-white-hover);
+}
+/* Active/highlighted group gets a subtle white left border */
+.comp-group-header.is-highlighted {
+  background: var(--ui-white-dim);
+  border-left: 2px solid var(--ui-white);
+  padding-left: 14px;
 }
 .comp-group-name {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--ui-white);
 }
 .comp-group-count {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--bg-3);
-  border: 1px solid var(--border);
+  color: #0d1321;
+  background: var(--ui-white);
   border-radius: 10px;
   padding: 1px 8px;
+  font-weight: 600;
 }
 .comp-variant {
   display: flex;
@@ -404,17 +430,18 @@ body::before {
   transition: background 0.1s;
 }
 .comp-variant:hover {
-  background: var(--bg-3);
-  color: var(--text-primary);
+  background: var(--ui-white-hover);
+  color: var(--ui-white);
 }
 .comp-variant.highlighted {
-  color: var(--amber);
-  background: var(--amber-glow);
+  color: var(--ui-white);
+  background: var(--ui-white-active);
 }
 .comp-variant-count {
   font-size: 10px;
-  background: var(--amber-dim);
-  color: var(--amber);
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-bright);
   border-radius: 10px;
   padding: 1px 7px;
 }
@@ -442,7 +469,7 @@ body::before {
   font-family: var(--font-mono);
 }
 
-/* ─── Stats bar ──────────────────────────────────────────────────────────────── */
+/* ─── Stats ──────────────────────────────────────────────────────────────────── */
 .stat-row {
   display: flex;
   align-items: baseline;
@@ -457,7 +484,7 @@ body::before {
   font-family: var(--font-mono);
   font-size: 18px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--ui-white);
 }
 .stat-value.green {
   color: var(--green);
@@ -467,7 +494,7 @@ body::before {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -488,7 +515,7 @@ body::before {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--ui-white);
   letter-spacing: 0.04em;
 }
 .modal-actions {
@@ -503,7 +530,7 @@ body::before {
   width: 16px;
   height: 16px;
   border: 2px solid var(--border);
-  border-top-color: var(--amber);
+  border-top-color: var(--ui-white);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -529,7 +556,7 @@ body::before {
   background: var(--text-dim);
 }
 
-/* ─── Delete button on drawing rows ─────────────────────────────────────────── */
+/* ─── Delete button on sidebar rows ─────────────────────────────────────────── */
 .delete-btn {
   flex-shrink: 0;
   background: transparent;
@@ -546,7 +573,6 @@ body::before {
     color 0.15s;
   line-height: 1;
 }
-/* Show the button when hovering the parent sidebar-item */
 .sidebar-item:hover .delete-btn {
   opacity: 1;
 }
