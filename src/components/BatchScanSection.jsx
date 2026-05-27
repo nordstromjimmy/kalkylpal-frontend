@@ -78,14 +78,13 @@ export default function BatchScanSection({
           justifyContent: "space-between",
           alignItems: "center",
           userSelect: "none",
-          marginTop: 16,
         }}
         className="comp-group-header"
       >
         <span
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: 600,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
@@ -323,77 +322,89 @@ export default function BatchScanSection({
                   </div>
 
                   {/* Preview rows */}
-                  {previewRows.map(([drawingId, row]) => (
-                    <div
-                      key={drawingId}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "5px 6px",
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontFamily: "var(--font-mono)",
-                          color: "var(--text-secondary)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          flex: 1,
-                          marginRight: 8,
-                        }}
-                        title={row.filename}
-                      >
-                        {row.filename}
-                      </span>
+                  {previewRows.map(([drawingId, row]) => {
+                    // Sum per base code from breakdown
+                    const baseTotals = {};
+                    for (const [base, variants] of Object.entries(
+                      row.breakdown || {},
+                    )) {
+                      baseTotals[base] = Object.values(variants).reduce(
+                        (s, n) => s + n,
+                        0,
+                      );
+                    }
+                    return (
                       <div
+                        key={drawingId}
                         style={{
                           display: "flex",
-                          gap: 6,
-                          flexShrink: 0,
+                          justifyContent: "space-between",
                           alignItems: "center",
+                          padding: "5px 6px",
+                          borderBottom: "1px solid var(--border)",
                         }}
                       >
-                        {previewCodes.map((code) => (
-                          <span
-                            key={code}
-                            style={{
-                              fontSize: 10,
-                              fontFamily: "var(--font-mono)",
-                              color: "var(--text-secondary)",
-                            }}
-                          >
-                            {code.replace(/[0-9]/g, "")}:
-                            <strong style={{ color: "var(--text-primary)" }}>
-                              {row.counts[code] ?? 0}
-                            </strong>
-                          </span>
-                        ))}
-                        {extraCodes && (
-                          <span
-                            style={{ fontSize: 10, color: "var(--text-dim)" }}
-                          >
-                            …
-                          </span>
-                        )}
                         <span
                           style={{
-                            fontSize: 11,
+                            fontSize: 10,
                             fontFamily: "var(--font-mono)",
-                            color: "var(--ui-white)",
-                            fontWeight: 700,
-                            minWidth: 20,
-                            textAlign: "right",
+                            color: "var(--text-secondary)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            flex: 1,
+                            marginRight: 8,
+                          }}
+                          title={row.filename}
+                        >
+                          {row.filename}
+                        </span>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            flexShrink: 0,
+                            alignItems: "center",
                           }}
                         >
-                          {row.total}
-                        </span>
+                          {previewCodes.map((code) => (
+                            <span
+                              key={code}
+                              style={{
+                                fontSize: 10,
+                                fontFamily: "var(--font-mono)",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              {code.replace(/[0-9]/g, "")}:
+                              <strong style={{ color: "var(--text-primary)" }}>
+                                {baseTotals[code] ?? 0}
+                              </strong>
+                            </span>
+                          ))}
+                          {extraCodes && (
+                            <span
+                              style={{ fontSize: 10, color: "var(--text-dim)" }}
+                            >
+                              …
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontFamily: "var(--font-mono)",
+                              color: "var(--ui-white)",
+                              fontWeight: 700,
+                              minWidth: 20,
+                              textAlign: "right",
+                            }}
+                          >
+                            {row.total}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {allRows.length > 3 && (
                     <div

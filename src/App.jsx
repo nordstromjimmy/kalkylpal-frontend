@@ -203,21 +203,29 @@ export default function App() {
         currentFile: filename,
       }));
 
-      // Scan each code separately (reuses existing endpoint)
-      const counts = {};
+      // Scan each code separately and collect full variant breakdown
+      // e.g. "TD201" → { "TD201-125": 2, "TD201-160": 3 }
+      const breakdown = {};
       let total = 0;
       for (const code of codes) {
         if (batchAbortRef.current) break;
         try {
           const res = await scanDrawing(drawingIds[i], code);
-          counts[code] = res.total_found;
+          // Flatten instances by full code (e.g. "TD201-160")
+          const variantCounts = {};
+          for (const instances of Object.values(res.components)) {
+            for (const inst of instances) {
+              variantCounts[inst.code] = (variantCounts[inst.code] || 0) + 1;
+            }
+          }
+          breakdown[code] = variantCounts;
           total += res.total_found;
         } catch {
-          counts[code] = 0;
+          breakdown[code] = {};
         }
       }
 
-      results[drawingIds[i]] = { filename, counts, total };
+      results[drawingIds[i]] = { filename, breakdown, total };
     }
 
     setBatchState((prev) => ({
