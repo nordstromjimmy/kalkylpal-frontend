@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getPageImageUrl } from "../api";
 
-const BOX_PADDING_PCT = 0.3;
+const BOX_PADDING_PCT = 0.05;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 6;
 const ZOOM_STEP = 0.12;
@@ -38,6 +38,7 @@ export default function DrawingViewer({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hoveredBox, setHoveredBox] = useState(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // ── Zoom & pan state ──────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
@@ -116,6 +117,67 @@ export default function DrawingViewer({
   function handleMouseLeave(e) {
     isPanning.current = false;
     e.currentTarget.style.cursor = "grab";
+  }
+
+  // ── Download page as PNG with highlight boxes painted on ─────────────────────
+  async function handleDownload() {
+    if (!pageDimensions) return;
+    setIsDownloading(true);
+    try {
+      // Fetch a fresh high-DPI copy of the page (200 DPI gives sharp downloads)
+      const url = getPageImageUrl(drawingId, pageNumber, 200);
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const bitmap = await createImageBitmap(blob);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+
+      // Scale factor: PDF points → canvas pixels
+      const scaleX = bitmap.width / pageDimensions.width;
+      const scaleY = bitmap.height / pageDimensions.height;
+
+      // Draw all component highlight boxes on top
+      visibleComponents.forEach((c) => {
+        const isActive =
+          highlightCode !== "__none__" &&
+          (!highlightCode ||
+            c.base_code === highlightCode ||
+            c.code === highlightCode);
+        const x = c.x0 * scaleX;
+        const y = c.y0 * scaleY;
+        const w = (c.x1 - c.x0) * scaleX;
+        const h = (c.y1 - c.y0) * scaleY;
+        ctx.fillStyle = isActive
+          ? "rgba(245,166,35,0.18)"
+          : "rgba(245,166,35,0.04)";
+        ctx.strokeStyle = isActive
+          ? "rgba(245,166,35,1)"
+          : "rgba(245,166,35,0.3)";
+        ctx.lineWidth = 2;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
+      });
+
+      // Trigger browser download
+      canvas.toBlob((dlBlob) => {
+        const dlUrl = URL.createObjectURL(dlBlob);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        a.download = `ritning_sida_${pageNumber}_markerad.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+      }, "image/png");
+    } catch (err) {
+      console.error("Nedladdning misslyckades:", err);
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   // ── Double click → reset view ─────────────────────────────────────────────
@@ -229,7 +291,24 @@ export default function DrawingViewer({
           </span>
         </div>
 
-        <span className="viewer-page-info">
+        <button
+          className="btn"
+          style={{ marginLeft: "auto" }}
+          onClick={handleDownload}
+          disabled={!imageLoaded || isDownloading}
+          title="Ladda ner ritning med markeringar"
+        >
+          {isDownloading ? (
+            <div
+              className="spinner"
+              style={{ width: 12, height: 12, borderWidth: 2 }}
+            />
+          ) : (
+            "↓ Ladda ner"
+          )}
+        </button>
+
+        <span className="viewer-page-info" style={{ marginLeft: 8 }}>
           {visibleComponents.length} komponenter
           {visibleWarnings.length > 0 && (
             <span style={{ color: "var(--red)", marginLeft: 6 }}>

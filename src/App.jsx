@@ -140,13 +140,65 @@ export default function App() {
     }
   }
 
-  function handleSelectDrawing(drawing) {
+  async function handleSelectDrawing(drawing, codes = null) {
     setSelectedDrawing(drawing);
     setScanResult(null);
     setManualItems([]);
     setPageNumber(1);
     setPageCount(1);
     setHighlightCode(null);
+
+    // If codes are provided (navigating from batch results modal),
+    // automatically run a merged scan for all codes on this drawing.
+    if (codes && codes.length > 0) {
+      setLoading(true);
+      showStatus(`Skannar ${drawing.filename}…`);
+      try {
+        // Fetch page dimensions explicitly before scanning so they are
+        // guaranteed to be set when setScanResult fires and the highlight
+        // layer tries to render. Without this, the useEffect that normally
+        // fetches dimensions races against the scan and often loses.
+        try {
+          const dims = await getPageInfo(drawing.id, 1);
+          setPageDimensions(dims);
+        } catch {
+          setPageDimensions(null);
+        }
+
+        const mergedComponents = {};
+        const mergedWarnings = [];
+        let totalFound = 0;
+
+        for (const code of codes) {
+          const result = await scanDrawing(drawing.id, code);
+          for (const [base, instances] of Object.entries(result.components)) {
+            if (!mergedComponents[base]) mergedComponents[base] = [];
+            mergedComponents[base].push(...instances);
+          }
+          for (const w of result.warnings || []) {
+            if (!mergedWarnings.find((e) => e.x0 === w.x0 && e.y0 === w.y0)) {
+              mergedWarnings.push(w);
+            }
+          }
+          totalFound += result.total_found;
+        }
+
+        setScanResult({
+          total_found: totalFound,
+          components: mergedComponents,
+          warnings: mergedWarnings,
+        });
+        const pages = Object.values(mergedComponents)
+          .flat()
+          .map((c) => c.page);
+        if (pages.length > 0) setPageCount(Math.max(...pages));
+        showStatus(`Hittade ${totalFound} komponenter i ${drawing.filename}`);
+      } catch {
+        showStatus("Skanning misslyckades");
+      } finally {
+        setLoading(false);
+      }
+    }
   }
 
   async function handleScan(searchCode) {
@@ -203,19 +255,29 @@ export default function App() {
         currentFile: filename,
       }));
 
+      // Fetch page dimensions for this drawing (used by bulk download)
+      let pageDimensions = null;
+      try {
+        pageDimensions = await getPageInfo(drawingIds[i], 1);
+      } catch {
+        /* non-critical — download will skip this drawing if missing */
+      }
+
       // Scan each code separately and collect full variant breakdown
       // e.g. "TD201" → { "TD201-125": 2, "TD201-160": 3 }
+      // Also keep raw instances (x/y coordinates) for image rendering.
       const breakdown = {};
+      const allInstances = [];
       let total = 0;
       for (const code of codes) {
         if (batchAbortRef.current) break;
         try {
           const res = await scanDrawing(drawingIds[i], code);
-          // Flatten instances by full code (e.g. "TD201-160")
           const variantCounts = {};
           for (const instances of Object.values(res.components)) {
             for (const inst of instances) {
               variantCounts[inst.code] = (variantCounts[inst.code] || 0) + 1;
+              allInstances.push(inst);
             }
           }
           breakdown[code] = variantCounts;
@@ -225,7 +287,13 @@ export default function App() {
         }
       }
 
-      results[drawingIds[i]] = { filename, breakdown, total };
+      results[drawingIds[i]] = {
+        filename,
+        breakdown,
+        total,
+        components: allInstances,
+        pageDimensions,
+      };
     }
 
     setBatchState((prev) => ({
@@ -256,6 +324,22 @@ export default function App() {
           <span className="topbar-logo">
             KALKYL<span>PAL</span>
           </span>
+          <div className="topbar-sep" />
+          <span className="topbar-sub">VVS Component Scanner</span>
+          {statusMsg && (
+            <>
+              <div className="topbar-sep" />
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--amber)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {statusMsg}
+              </span>
+            </>
+          )}
         </header>
 
         <Sidebar

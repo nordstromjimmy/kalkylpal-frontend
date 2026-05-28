@@ -42,6 +42,7 @@ export default function ComponentPanel({
   onSelectDrawing,
 }) {
   const [searchInput, setSearchInput] = useState("");
+  const [isScanOpen, setIsScanOpen] = useState(true); // open by default — primary feature
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [manualCount, setManualCount] = useState("1");
@@ -139,54 +140,82 @@ export default function ComponentPanel({
         </div>
       </div>
 
-      {/* ── Sök och skanna ── */}
-      <div className="panel-section">
-        <div className="panel-label">Skanna ritning</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input
-            className="input"
-            placeholder="Filtrera: TD201, RL1…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleScan()}
-          />
+      {/* ── Skanna ritning (collapsible) ── */}
+      <div className="panel-section" style={{ padding: 0 }}>
+        <div
+          onClick={() => setIsScanOpen((o) => !o)}
+          className="comp-group-header"
+          style={{
+            padding: "10px 16px",
+            cursor: "pointer",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            userSelect: "none",
+          }}
+        >
+          <div className="panel-label" style={{ marginBottom: 0 }}>
+            Skanna ritning
+          </div>
+          <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+            {isScanOpen ? "▲" : "▼"}
+          </span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-            onClick={handleScan}
-            disabled={loading || !drawingId}
-          >
-            {loading ? (
-              <>
-                <div className="spinner" /> Skannar…
-              </>
-            ) : (
-              "▶ Kör skanning"
-            )}
-          </button>
-          {hasResults && (
-            <button
-              className="btn btn-ghost"
-              onClick={handleClear}
-              title="Rensa resultat"
-            >
-              Rensa
-            </button>
-          )}
-        </div>
-        {searchInput && (
+        {isScanOpen && (
           <div
             style={{
-              marginTop: 6,
-              fontSize: 10,
-              color: "var(--text-dim)",
-              fontFamily: "var(--font-mono)",
+              padding: "0 16px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
             }}
           >
-            Filtrerar på "{searchInput.toUpperCase()}" — rensa för att skanna
-            allt
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="input"
+                placeholder="Filtrera: TD201, RL1…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={handleScan}
+                disabled={loading || !drawingId}
+              >
+                {loading ? (
+                  <>
+                    <div className="spinner" /> Skannar…
+                  </>
+                ) : (
+                  "▶ Kör skanning"
+                )}
+              </button>
+              {hasResults && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleClear}
+                  title="Rensa resultat"
+                >
+                  Rensa
+                </button>
+              )}
+            </div>
+            {searchInput && (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "var(--text-dim)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                Filtrerar på "{searchInput.toUpperCase()}" — rensa för att
+                skanna allt
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -285,7 +314,7 @@ export default function ComponentPanel({
           </div>
         )}
 
-        {drawingId && !hasResults && !loading && (
+        {drawingId && !hasResults && !loading && !batchState?.results && (
           <div
             style={{
               padding: 16,
