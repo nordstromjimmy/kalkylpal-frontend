@@ -447,7 +447,7 @@ export default function ComponentPanel({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                className="btn btn-green"
+                className="btn"
                 style={{ flex: 1 }}
                 onClick={handleManualAdd}
               >
