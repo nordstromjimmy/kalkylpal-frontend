@@ -256,22 +256,6 @@ export default function App() {
           <span className="topbar-logo">
             KALKYL<span>PAL</span>
           </span>
-          <div className="topbar-sep" />
-          <span className="topbar-sub">VVS Component Scanner</span>
-          {statusMsg && (
-            <>
-              <div className="topbar-sep" />
-              <span
-                style={{
-                  fontSize: 11,
-                  color: "var(--amber)",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                {statusMsg}
-              </span>
-            </>
-          )}
         </header>
 
         <Sidebar

@@ -222,15 +222,13 @@ export default function BatchResultsModal({
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="btn btn-ghost" onClick={exportExcel}>
+            <button className="btn" onClick={exportExcel}>
               ↓ Excel
             </button>
-            <button className="btn btn-ghost" onClick={exportPDF}>
+            <button className="btn" onClick={exportPDF}>
               ↓ PDF
             </button>
-            <div
-              style={{ width: 1, height: 20, background: "var(--border)" }}
-            />
+
             <button className="btn btn-ghost" onClick={onClose}>
               ✕
             </button>

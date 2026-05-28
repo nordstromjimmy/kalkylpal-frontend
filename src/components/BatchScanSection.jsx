@@ -72,7 +72,7 @@ export default function BatchScanSection({
       <div
         onClick={() => setIsOpen((o) => !o)}
         style={{
-          padding: "10px 4px",
+          padding: "10px 16px",
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
@@ -101,7 +101,7 @@ export default function BatchScanSection({
       {!isOpen ? null : (
         <div
           style={{
-            padding: "0 4px 16px",
+            padding: "0 16px 16px",
             display: "flex",
             flexDirection: "column",
             gap: 10,

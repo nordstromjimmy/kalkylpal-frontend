@@ -298,7 +298,9 @@ export default function DrawingViewer({
                 {visibleComponents.map((c, i) => {
                   const isActive =
                     highlightCode !== "__none__" &&
-                    (!highlightCode || c.base_code === highlightCode);
+                    (!highlightCode ||
+                      c.base_code === highlightCode ||
+                      c.code === highlightCode);
                   return (
                     <div
                       key={`det-${i}`}

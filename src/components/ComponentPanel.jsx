@@ -176,15 +176,6 @@ export default function ComponentPanel({
             </button>
           )}
         </div>
-        {/* ── Projektskanning ── */}
-        <BatchScanSection
-          projectName={projectName}
-          projectDrawings={projectDrawings}
-          batchState={batchState}
-          onBatchScan={onBatchScan}
-          onBatchAbort={onBatchAbort}
-          onSelectDrawing={onSelectDrawing}
-        />
         {searchInput && (
           <div
             style={{
@@ -199,6 +190,16 @@ export default function ComponentPanel({
           </div>
         )}
       </div>
+
+      {/* ── Projektskanning ── */}
+      <BatchScanSection
+        projectName={projectName}
+        projectDrawings={projectDrawings}
+        batchState={batchState}
+        onBatchScan={onBatchScan}
+        onBatchAbort={onBatchAbort}
+        onSelectDrawing={onSelectDrawing}
+      />
 
       {/* ── Scroll area ── */}
       <div className="panel-scroll">
@@ -249,15 +250,22 @@ export default function ComponentPanel({
                   </div>
 
                   {isExpanded &&
-                    Object.entries(variants).map(([code, count]) => (
-                      <div
-                        key={code}
-                        className={`comp-variant ${isHighlighted ? "highlighted" : ""}`}
-                      >
-                        <span>{code}</span>
-                        <span className="comp-variant-count">×{count}</span>
-                      </div>
-                    ))}
+                    Object.entries(variants).map(([code, count]) => {
+                      const isVariantHighlighted = highlightCode === code;
+                      return (
+                        <div
+                          key={code}
+                          className={`comp-variant ${isVariantHighlighted ? "highlighted" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation(); // don't trigger the base_code row click
+                            onHighlight(isVariantHighlighted ? null : code);
+                          }}
+                        >
+                          <span>{code}</span>
+                          <span className="comp-variant-count">×{count}</span>
+                        </div>
+                      );
+                    })}
                 </div>
               );
             })}

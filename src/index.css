@@ -35,8 +35,8 @@
 
   --radius: 4px;
   --radius-lg: 8px;
-  --sidebar-width: 240px;
-  --panel-width: 320px;
+  --sidebar-width: 300px;
+  --panel-width: 360px;
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────────────── */
@@ -97,7 +97,7 @@ body::before {
 }
 .topbar-logo {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--amber);
