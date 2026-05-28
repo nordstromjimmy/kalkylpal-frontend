@@ -386,11 +386,11 @@ export default function ComponentPanel({
       >
         {!showManualForm ? (
           <button
-            className="btn btn-green btn-full"
+            className="btn btn-full"
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
-            + Lägg till komponent manuellt
+            Lägg till komponent manuellt
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
