@@ -191,7 +191,7 @@ export default function ComponentPanel({
                     <div className="spinner" /> Skannar…
                   </>
                 ) : (
-                  "▶ Kör skanning"
+                  "▶ Skanna"
                 )}
               </button>
               {hasResults && (
@@ -218,6 +218,155 @@ export default function ComponentPanel({
             )}
           </div>
         )}
+        {/* ── Scroll area ── */}
+        <div className="panel-scroll">
+          {/* Component list */}
+          {sortedGroups.length > 0 && (
+            <>
+              <div
+                style={{
+                  padding: "10px 16px 4px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div className="panel-label" style={{ marginBottom: 0 }}>
+                  Hittade komponenter
+                </div>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 10, padding: "3px 8px" }}
+                  onClick={handleToggleHighlight}
+                >
+                  {toggleLabel()}
+                </button>
+              </div>
+
+              {sortedGroups.map((base_code) => {
+                const instances = components[base_code];
+                const isExpanded = expandedGroups[base_code];
+                const isHighlighted = highlightCode === base_code;
+
+                const variants = instances.reduce((acc, inst) => {
+                  acc[inst.code] = (acc[inst.code] || 0) + 1;
+                  return acc;
+                }, {});
+
+                return (
+                  <div key={base_code} className="comp-group">
+                    <div
+                      onClick={() => {
+                        toggleGroup(base_code);
+                        onHighlight(isHighlighted ? null : base_code);
+                      }}
+                      className={`comp-group-header${isHighlighted ? " is-highlighted" : ""}`}
+                    >
+                      <span className="comp-group-name">{base_code}</span>
+                      <span className="comp-group-count">
+                        {instances.length}
+                      </span>
+                    </div>
+
+                    {isExpanded &&
+                      Object.entries(variants).map(([code, count]) => {
+                        const isVariantHighlighted = highlightCode === code;
+                        return (
+                          <div
+                            key={code}
+                            className={`comp-variant ${isVariantHighlighted ? "highlighted" : ""}`}
+                            onClick={(e) => {
+                              e.stopPropagation(); // don't trigger the base_code row click
+                              onHighlight(isVariantHighlighted ? null : code);
+                            }}
+                          >
+                            <span>{code}</span>
+                            <span className="comp-variant-count">×{count}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {!drawingId && (
+            <div
+              style={{
+                padding: 16,
+                color: "var(--text-dim)",
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              Välj en ritning och kör en skanning
+            </div>
+          )}
+
+          {drawingId && !hasResults && !loading && !batchState?.results && (
+            <div
+              style={{
+                padding: 16,
+                color: "var(--text-dim)",
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              Inga komponenter hittade ännu — kör en skanning
+            </div>
+          )}
+
+          {/* Manuellt tillagda */}
+          {manualItems?.length > 0 && (
+            <>
+              <div style={{ padding: "10px 16px 4px" }}>
+                <div
+                  className="panel-label"
+                  style={{ marginBottom: 0, color: "var(--green)" }}
+                >
+                  Manuellt tillagda
+                </div>
+              </div>
+              {manualItems.map((m, i) => (
+                <div
+                  key={i}
+                  className="comp-variant"
+                  style={{ color: "var(--green)" }}
+                >
+                  <span>+ {m.code}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                    s.{m.page}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Varningar */}
+          {warnings.length > 0 && (
+            <>
+              <div style={{ padding: "10px 16px 4px" }}>
+                <div
+                  className="panel-label"
+                  style={{ marginBottom: 0, color: "var(--red)" }}
+                >
+                  ⚠ Kontrollera manuellt ({warnings.length})
+                </div>
+              </div>
+              {warnings.map((w, i) => (
+                <div key={i} className="warning-item">
+                  <span className="warning-dot">▸</span>
+                  <div className="warning-text">
+                    <span className="warning-code">{w.fragment}</span>
+                    {" — etiketten kan vara dold på sida "}
+                    {w.page}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Projektskanning ── */}
@@ -229,154 +378,6 @@ export default function ComponentPanel({
         onBatchAbort={onBatchAbort}
         onSelectDrawing={onSelectDrawing}
       />
-
-      {/* ── Scroll area ── */}
-      <div className="panel-scroll">
-        {/* Component list */}
-        {sortedGroups.length > 0 && (
-          <>
-            <div
-              style={{
-                padding: "10px 16px 4px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div className="panel-label" style={{ marginBottom: 0 }}>
-                Hittade komponenter
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: 10, padding: "3px 8px" }}
-                onClick={handleToggleHighlight}
-              >
-                {toggleLabel()}
-              </button>
-            </div>
-
-            {sortedGroups.map((base_code) => {
-              const instances = components[base_code];
-              const isExpanded = expandedGroups[base_code];
-              const isHighlighted = highlightCode === base_code;
-
-              const variants = instances.reduce((acc, inst) => {
-                acc[inst.code] = (acc[inst.code] || 0) + 1;
-                return acc;
-              }, {});
-
-              return (
-                <div key={base_code} className="comp-group">
-                  <div
-                    onClick={() => {
-                      toggleGroup(base_code);
-                      onHighlight(isHighlighted ? null : base_code);
-                    }}
-                    className={`comp-group-header${isHighlighted ? " is-highlighted" : ""}`}
-                  >
-                    <span className="comp-group-name">{base_code}</span>
-                    <span className="comp-group-count">{instances.length}</span>
-                  </div>
-
-                  {isExpanded &&
-                    Object.entries(variants).map(([code, count]) => {
-                      const isVariantHighlighted = highlightCode === code;
-                      return (
-                        <div
-                          key={code}
-                          className={`comp-variant ${isVariantHighlighted ? "highlighted" : ""}`}
-                          onClick={(e) => {
-                            e.stopPropagation(); // don't trigger the base_code row click
-                            onHighlight(isVariantHighlighted ? null : code);
-                          }}
-                        >
-                          <span>{code}</span>
-                          <span className="comp-variant-count">×{count}</span>
-                        </div>
-                      );
-                    })}
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        {!drawingId && (
-          <div
-            style={{
-              padding: 16,
-              color: "var(--text-dim)",
-              fontSize: 11,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            Välj en ritning och kör en skanning
-          </div>
-        )}
-
-        {drawingId && !hasResults && !loading && !batchState?.results && (
-          <div
-            style={{
-              padding: 16,
-              color: "var(--text-dim)",
-              fontSize: 11,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            Inga komponenter hittade ännu — kör en skanning
-          </div>
-        )}
-
-        {/* Manuellt tillagda */}
-        {manualItems?.length > 0 && (
-          <>
-            <div style={{ padding: "10px 16px 4px" }}>
-              <div
-                className="panel-label"
-                style={{ marginBottom: 0, color: "var(--green)" }}
-              >
-                Manuellt tillagda
-              </div>
-            </div>
-            {manualItems.map((m, i) => (
-              <div
-                key={i}
-                className="comp-variant"
-                style={{ color: "var(--green)" }}
-              >
-                <span>+ {m.code}</span>
-                <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-                  s.{m.page}
-                </span>
-              </div>
-            ))}
-          </>
-        )}
-
-        {/* Varningar */}
-        {warnings.length > 0 && (
-          <>
-            <div style={{ padding: "10px 16px 4px" }}>
-              <div
-                className="panel-label"
-                style={{ marginBottom: 0, color: "var(--red)" }}
-              >
-                ⚠ Kontrollera manuellt ({warnings.length})
-              </div>
-            </div>
-            {warnings.map((w, i) => (
-              <div key={i} className="warning-item">
-                <span className="warning-dot">▸</span>
-                <div className="warning-text">
-                  <span className="warning-code">{w.fragment}</span>
-                  {" — etiketten kan vara dold på sida "}
-                  {w.page}
-                </div>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
 
       {/* ── Lägg till manuellt ── */}
       <div

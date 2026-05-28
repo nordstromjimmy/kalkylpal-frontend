@@ -568,7 +568,7 @@ export default function BatchScanSection({
                         Skapar bilder…
                       </>
                     ) : (
-                      "↓ Ladda ner alla ritningar med markeringar"
+                      "Ladda ner alla ritningar med markeringar"
                     )}
                   </button>
 
@@ -615,7 +615,7 @@ export default function BatchScanSection({
                   {/* Scrollable results list */}
                   <div
                     style={{
-                      maxHeight: 380,
+                      maxHeight: 420,
                       overflowY: "auto",
                       border: "1px solid var(--border)",
                       borderRadius: "var(--radius)",

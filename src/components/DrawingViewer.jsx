@@ -304,7 +304,7 @@ export default function DrawingViewer({
               style={{ width: 12, height: 12, borderWidth: 2 }}
             />
           ) : (
-            "↓ Ladda ner"
+            "Ladda ner"
           )}
         </button>
 
