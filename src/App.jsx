@@ -11,6 +11,12 @@ import {
   getPageInfo,
   deleteDrawing,
   deleteProject,
+  getScanResult,
+  addManualItem,
+  getManualItems,
+  clearDrawingData,
+  saveBatchResult,
+  getBatchResult,
 } from "./api";
 
 export default function App() {
@@ -59,6 +65,13 @@ export default function App() {
     setManualItems([]);
     setPageNumber(1);
     setHighlightCode(null);
+    // Restore saved batch state for this project
+    try {
+      const saved = await getBatchResult(project.id);
+      setBatchState(saved || null);
+    } catch {
+      setBatchState(null);
+    }
   }
 
   async function handleCreateProject() {
@@ -148,6 +161,30 @@ export default function App() {
     setPageCount(1);
     setHighlightCode(null);
 
+    // Normal navigation (no codes) — restore saved state from DB
+    if (!codes || codes.length === 0) {
+      setLoading(true);
+      try {
+        const [savedResult, savedManuals] = await Promise.all([
+          getScanResult(drawing.id),
+          getManualItems(drawing.id),
+        ]);
+        if (savedResult) {
+          setScanResult(savedResult);
+          const pages = Object.values(savedResult.components)
+            .flat()
+            .map((c) => c.page);
+          if (pages.length > 0) setPageCount(Math.max(...pages));
+        }
+        setManualItems(savedManuals || []);
+      } catch {
+        // No saved data — start fresh, that's fine
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     // If codes are provided (navigating from batch results modal),
     // automatically run a merged scan for all codes on this drawing.
     if (codes && codes.length > 0) {
@@ -224,11 +261,77 @@ export default function App() {
     }
   }
 
-  function handleManualAdd(item) {
-    setManualItems((prev) => [...prev, item]);
+  async function handleManualAdd(item) {
+    if (selectedDrawing) {
+      try {
+        const saved = await addManualItem(selectedDrawing.id, item);
+        setManualItems((prev) => [...prev, { ...item, id: saved.id }]);
+      } catch {
+        setManualItems((prev) => [...prev, item]); // fallback if DB save fails
+      }
+    } else {
+      setManualItems((prev) => [...prev, item]);
+    }
+  }
+
+  // Merges a new batch scan into the existing batchState.
+  // New codes overwrite old for the same drawings; drawings not in the new scan keep their results.
+  function mergeBatchState(existing, newScan) {
+    if (!existing || !existing.results) return { ...newScan, status: "done" };
+
+    const allCodes = [
+      ...new Set([...(existing.codes || []), ...(newScan.codes || [])]),
+    ];
+    const mergedResults = { ...(existing.results || {}) };
+
+    for (const [drawingId, newRow] of Object.entries(newScan.results || {})) {
+      const existingRow = mergedResults[drawingId];
+      if (!existingRow) {
+        mergedResults[drawingId] = newRow;
+      } else {
+        // Merge breakdowns: new codes overwrite old, other codes remain
+        const mergedBreakdown = {
+          ...(existingRow.breakdown || {}),
+          ...(newRow.breakdown || {}),
+        };
+
+        // Merge components: remove old instances for the newly scanned codes, add new ones
+        const existingComponents = (existingRow.components || []).filter(
+          (c) => !newScan.codes.some((code) => c.base_code === code),
+        );
+        const mergedComponents = [
+          ...existingComponents,
+          ...(newRow.components || []),
+        ];
+
+        // Recalculate total from merged breakdown
+        const total = Object.values(mergedBreakdown).reduce(
+          (sum, variants) =>
+            sum + Object.values(variants).reduce((s, n) => s + n, 0),
+          0,
+        );
+
+        mergedResults[drawingId] = {
+          ...existingRow,
+          breakdown: mergedBreakdown,
+          components: mergedComponents,
+          total,
+          pageDimensions: newRow.pageDimensions || existingRow.pageDimensions,
+        };
+      }
+    }
+
+    return {
+      status: "done",
+      codes: allCodes,
+      progress: newScan.progress,
+      currentFile: "",
+      results: mergedResults,
+    };
   }
 
   async function handleBatchScan(drawingIds, codes) {
+    const preScanBatchState = batchState; // capture before overwriting with "running" state
     batchAbortRef.current = false;
     setBatchState({
       status: "running",
@@ -296,11 +399,26 @@ export default function App() {
       };
     }
 
-    setBatchState((prev) => ({
-      ...prev,
-      status: batchAbortRef.current ? "done" : "done",
+    const newScan = {
+      status: "done",
+      codes,
+      progress: { current: drawingIds.length, total: drawingIds.length },
+      currentFile: "",
       results,
-    }));
+    };
+
+    // Merge into pre-scan state so previous searches accumulate
+    const merged = mergeBatchState(preScanBatchState, newScan);
+    setBatchState(merged);
+
+    // Persist to DB so results survive page refresh
+    if (selectedProject) {
+      try {
+        await saveBatchResult(selectedProject.id, merged);
+      } catch (e) {
+        console.error("Save batch failed:", e);
+      }
+    }
   }
 
   function handleBatchAbort() {
@@ -385,10 +503,17 @@ export default function App() {
           highlightCode={highlightCode}
           loading={loading}
           onScan={handleScan}
-          onClearScan={() => {
+          onClearScan={async () => {
             setScanResult(null);
             setManualItems([]);
             setHighlightCode(null);
+            if (selectedDrawing) {
+              try {
+                await clearDrawingData(selectedDrawing.id);
+              } catch {
+                /* non-critical */
+              }
+            }
           }}
           projectName={selectedProject?.name || "Projekt"}
           projectDrawings={selectedProject?.drawings || []}

@@ -112,7 +112,7 @@ export default function Sidebar({
             {confirmDeleteProjectId === p.id && (
               <div
                 style={{
-                  padding: "6px 10px",
+                  padding: "10px 6px",
                   background: "var(--red-dim)",
                   borderLeft: "2px solid var(--red)",
                   display: "flex",
@@ -122,14 +122,14 @@ export default function Sidebar({
               >
                 <span
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 12,
                     color: "var(--red)",
                     fontFamily: "var(--font-mono)",
                   }}
                 >
                   Ta bort "{p.name}"?
                 </span>
-                <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
                   Alla ritningar raderas permanent.
                 </span>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -137,7 +137,7 @@ export default function Sidebar({
                     className="btn"
                     style={{
                       padding: "2px 8px",
-                      fontSize: 10,
+                      fontSize: 11,
                       background: "var(--red)",
                       color: "#fff",
                       border: "none",
@@ -149,7 +149,7 @@ export default function Sidebar({
                   </button>
                   <button
                     className="btn btn-ghost"
-                    style={{ padding: "2px 8px", fontSize: 10 }}
+                    style={{ padding: "2px 8px", fontSize: 11 }}
                     onClick={handleCancelDeleteProject}
                   >
                     Avbryt

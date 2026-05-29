@@ -101,3 +101,76 @@ export async function deleteProject(projectId) {
   if (!res.ok) throw new Error("Kunde inte ta bort projekt");
   return res.json();
 }
+
+// ── Persisted scan results & manual items ─────────────────────────────────────
+
+/**
+ * Loads the last scan result from stored ComponentInstances.
+ * Returns null if no scan has been run for this drawing.
+ */
+export async function getScanResult(drawingId) {
+  const res = await fetch(`${BASE}/drawings/${drawingId}/scan-result`);
+  if (res.status === 204) return null; // no scan stored
+  if (!res.ok) throw new Error("Failed to load scan result");
+  return res.json();
+}
+
+export async function addManualItem(drawingId, item) {
+  const res = await fetch(`${BASE}/drawings/${drawingId}/manual-items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code: item.code,
+      base_code: item.base_code,
+      page: item.page,
+      x0: item.x0 ?? null,
+      y0: item.y0 ?? null,
+      x1: item.x1 ?? null,
+      y1: item.y1 ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to save manual item");
+  return res.json(); // returns { id, code, ... } — id needed for future deletion
+}
+
+export async function getManualItems(drawingId) {
+  const res = await fetch(`${BASE}/drawings/${drawingId}/manual-items`);
+  if (!res.ok) throw new Error("Failed to load manual items");
+  return res.json();
+}
+
+export async function deleteManualItem(drawingId, itemId) {
+  const res = await fetch(
+    `${BASE}/drawings/${drawingId}/manual-items/${itemId}`,
+    {
+      method: "DELETE",
+    },
+  );
+  if (!res.ok) throw new Error("Failed to delete manual item");
+  return res.json();
+}
+
+export async function clearDrawingData(drawingId) {
+  const res = await fetch(`${BASE}/drawings/${drawingId}/clear-data`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to clear drawing data");
+  return res.json();
+}
+
+export async function saveBatchResult(projectId, batchState) {
+  const res = await fetch(`${BASE}/projects/${projectId}/batch-result`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(batchState),
+  });
+  if (!res.ok) throw new Error("Failed to save batch result");
+  return res.json();
+}
+
+export async function getBatchResult(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/batch-result`);
+  if (res.status === 204) return null;
+  if (!res.ok) throw new Error("Failed to load batch result");
+  return res.json();
+}

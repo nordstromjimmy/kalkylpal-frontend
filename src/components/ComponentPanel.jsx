@@ -42,12 +42,16 @@ export default function ComponentPanel({
   onSelectDrawing,
 }) {
   const [searchInput, setSearchInput] = useState("");
-  const [isScanOpen, setIsScanOpen] = useState(true); // open by default — primary feature
+  const [isScanOpen, setIsScanOpen] = useState(true);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [manualCount, setManualCount] = useState("1");
   const [manualPage, setManualPage] = useState("1");
   const [expandedGroups, setExpandedGroups] = useState({});
+  // Warning confirm state: { index, code } or null
+  const [confirming, setConfirming] = useState(null);
+  // Set of warning indices the user has dismissed or confirmed
+  const [dismissedWarnings, setDismissedWarnings] = useState(new Set());
 
   function toggleGroup(base_code) {
     setExpandedGroups((prev) => ({ ...prev, [base_code]: !prev[base_code] }));
@@ -87,7 +91,12 @@ export default function ComponentPanel({
   const components = scanResult?.components || {};
   const warnings = scanResult?.warnings || [];
   const sortedGroups = Object.keys(components).sort();
-  const autoTotal = scanResult?.total_found || 0;
+
+  // Summary shows project-wide totals when a batch scan exists,
+  // otherwise falls back to the currently selected drawing's scan.
+  const autoTotal = batchState?.results
+    ? Object.values(batchState.results).reduce((s, r) => s + r.total, 0)
+    : scanResult?.total_found || 0;
   const manualTotal = manualItems?.length || 0;
   const grandTotal = autoTotal + manualTotal;
   const hasResults = scanResult !== null;
@@ -140,244 +149,398 @@ export default function ComponentPanel({
         </div>
       </div>
 
-      {/* ── Skanna ritning (collapsible) ── */}
-      <div className="panel-section" style={{ padding: 0 }}>
-        <div
-          onClick={() => setIsScanOpen((o) => !o)}
-          className="comp-group-header"
-          style={{
-            padding: "10px 16px",
-            cursor: "pointer",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            userSelect: "none",
-          }}
-        >
-          <div className="panel-label" style={{ marginBottom: 0 }}>
-            Skanna ritning
-          </div>
-          <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-            {isScanOpen ? "▲" : "▼"}
-          </span>
-        </div>
-        {isScanOpen && (
+      {/* ── Skanna ritning (collapsible) — hidden, using Projektskanning instead ── */}
+      {false && (
+        <div className="panel-section" style={{ padding: 0 }}>
           <div
+            onClick={() => setIsScanOpen((o) => !o)}
+            className="comp-group-header"
             style={{
-              padding: "0 16px 14px",
+              padding: "10px 16px",
+              cursor: "pointer",
               display: "flex",
-              flexDirection: "column",
-              gap: 8,
+              justifyContent: "space-between",
+              alignItems: "center",
+              userSelect: "none",
             }}
           >
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                className="input"
-                placeholder="Filtrera: TD201, RL1…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleScan()}
-              />
+            <div className="panel-label" style={{ marginBottom: 0 }}>
+              Skanna ritning
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={handleScan}
-                disabled={loading || !drawingId}
-              >
-                {loading ? (
-                  <>
-                    <div className="spinner" /> Skannar…
-                  </>
-                ) : (
-                  "▶ Skanna"
-                )}
-              </button>
-              {hasResults && (
+            <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+              {isScanOpen ? "▲" : "▼"}
+            </span>
+          </div>
+          {isScanOpen && (
+            <div
+              style={{
+                padding: "0 16px 14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="input"
+                  placeholder="Filtrera: TD201, RL1…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
                 <button
-                  className="btn btn-ghost"
-                  onClick={handleClear}
-                  title="Rensa resultat"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  onClick={handleScan}
+                  disabled={loading || !drawingId}
                 >
-                  Rensa
+                  {loading ? (
+                    <>
+                      <div className="spinner" /> Skannar…
+                    </>
+                  ) : (
+                    "▶ Kör skanning"
+                  )}
                 </button>
+                {hasResults && (
+                  <button
+                    className="btn btn-ghost"
+                    onClick={handleClear}
+                    title="Rensa resultat"
+                  >
+                    Rensa
+                  </button>
+                )}
+              </div>
+              {searchInput && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text-dim)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  Filtrerar på "{searchInput.toUpperCase()}" — rensa för att
+                  skanna allt
+                </div>
               )}
             </div>
-            {searchInput && (
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "var(--text-dim)",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                Filtrerar på "{searchInput.toUpperCase()}" — rensa för att
-                skanna allt
-              </div>
-            )}
-          </div>
-        )}
-        {/* ── Scroll area ── */}
-        <div className="panel-scroll">
-          {/* Component list */}
-          {sortedGroups.length > 0 && (
-            <>
-              <div
-                style={{
-                  padding: "10px 16px 4px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div className="panel-label" style={{ marginBottom: 0 }}>
-                  Hittade komponenter
-                </div>
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: 10, padding: "3px 8px" }}
-                  onClick={handleToggleHighlight}
-                >
-                  {toggleLabel()}
-                </button>
-              </div>
-
-              {sortedGroups.map((base_code) => {
-                const instances = components[base_code];
-                const isExpanded = expandedGroups[base_code];
-                const isHighlighted = highlightCode === base_code;
-
-                const variants = instances.reduce((acc, inst) => {
-                  acc[inst.code] = (acc[inst.code] || 0) + 1;
-                  return acc;
-                }, {});
-
-                return (
-                  <div key={base_code} className="comp-group">
-                    <div
-                      onClick={() => {
-                        toggleGroup(base_code);
-                        onHighlight(isHighlighted ? null : base_code);
-                      }}
-                      className={`comp-group-header${isHighlighted ? " is-highlighted" : ""}`}
-                    >
-                      <span className="comp-group-name">{base_code}</span>
-                      <span className="comp-group-count">
-                        {instances.length}
-                      </span>
-                    </div>
-
-                    {isExpanded &&
-                      Object.entries(variants).map(([code, count]) => {
-                        const isVariantHighlighted = highlightCode === code;
-                        return (
-                          <div
-                            key={code}
-                            className={`comp-variant ${isVariantHighlighted ? "highlighted" : ""}`}
-                            onClick={(e) => {
-                              e.stopPropagation(); // don't trigger the base_code row click
-                              onHighlight(isVariantHighlighted ? null : code);
-                            }}
-                          >
-                            <span>{code}</span>
-                            <span className="comp-variant-count">×{count}</span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                );
-              })}
-            </>
-          )}
-
-          {!drawingId && (
-            <div
-              style={{
-                padding: 16,
-                color: "var(--text-dim)",
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              Välj en ritning och kör en skanning
-            </div>
-          )}
-
-          {drawingId && !hasResults && !loading && !batchState?.results && (
-            <div
-              style={{
-                padding: 16,
-                color: "var(--text-dim)",
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              Inga komponenter hittade ännu — kör en skanning
-            </div>
-          )}
-
-          {/* Manuellt tillagda */}
-          {manualItems?.length > 0 && (
-            <>
-              <div style={{ padding: "10px 16px 4px" }}>
-                <div
-                  className="panel-label"
-                  style={{ marginBottom: 0, color: "var(--green)" }}
-                >
-                  Manuellt tillagda
-                </div>
-              </div>
-              {manualItems.map((m, i) => (
-                <div
-                  key={i}
-                  className="comp-variant"
-                  style={{ color: "var(--green)" }}
-                >
-                  <span>+ {m.code}</span>
-                  <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-                    s.{m.page}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-
-          {/* Varningar */}
-          {warnings.length > 0 && (
-            <>
-              <div style={{ padding: "10px 16px 4px" }}>
-                <div
-                  className="panel-label"
-                  style={{ marginBottom: 0, color: "var(--red)" }}
-                >
-                  ⚠ Kontrollera manuellt ({warnings.length})
-                </div>
-              </div>
-              {warnings.map((w, i) => (
-                <div key={i} className="warning-item">
-                  <span className="warning-dot">▸</span>
-                  <div className="warning-text">
-                    <span className="warning-code">{w.fragment}</span>
-                    {" — etiketten kan vara dold på sida "}
-                    {w.page}
-                  </div>
-                </div>
-              ))}
-            </>
           )}
         </div>
-      </div>
+      )}
 
-      {/* ── Projektskanning ── */}
-      <BatchScanSection
-        projectName={projectName}
-        projectDrawings={projectDrawings}
-        batchState={batchState}
-        onBatchScan={onBatchScan}
-        onBatchAbort={onBatchAbort}
-        onSelectDrawing={onSelectDrawing}
-      />
+      {/* ── Scroll area ── */}
+      <div className="panel-scroll">
+        {/* Component list — hidden, results shown in Projektskanning instead */}
+        {false && sortedGroups.length > 0 && (
+          <>
+            <div
+              style={{
+                padding: "10px 16px 4px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div className="panel-label" style={{ marginBottom: 0 }}>
+                Hittade komponenter
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 10, padding: "3px 8px" }}
+                onClick={handleToggleHighlight}
+              >
+                {toggleLabel()}
+              </button>
+            </div>
+
+            {sortedGroups.map((base_code) => {
+              const instances = components[base_code];
+              const isExpanded = expandedGroups[base_code];
+              const isHighlighted = highlightCode === base_code;
+
+              const variants = instances.reduce((acc, inst) => {
+                acc[inst.code] = (acc[inst.code] || 0) + 1;
+                return acc;
+              }, {});
+
+              return (
+                <div key={base_code} className="comp-group">
+                  <div
+                    onClick={() => {
+                      toggleGroup(base_code);
+                      onHighlight(isHighlighted ? null : base_code);
+                    }}
+                    className={`comp-group-header${isHighlighted ? " is-highlighted" : ""}`}
+                  >
+                    <span className="comp-group-name">{base_code}</span>
+                    <span className="comp-group-count">{instances.length}</span>
+                  </div>
+
+                  {isExpanded &&
+                    Object.entries(variants).map(([code, count]) => {
+                      const isVariantHighlighted = highlightCode === code;
+                      return (
+                        <div
+                          key={code}
+                          className={`comp-variant ${isVariantHighlighted ? "highlighted" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation(); // don't trigger the base_code row click
+                            onHighlight(isVariantHighlighted ? null : code);
+                          }}
+                        >
+                          <span>{code}</span>
+                          <span className="comp-variant-count">×{count}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {!drawingId && (
+          <div
+            style={{
+              padding: 16,
+              color: "var(--text-dim)",
+              fontSize: 11,
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            Välj en ritning och kör en skanning
+          </div>
+        )}
+
+        {drawingId && !hasResults && !loading && !batchState?.results && (
+          <div
+            style={{
+              padding: 16,
+              color: "var(--text-dim)",
+              fontSize: 11,
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            Inga komponenter hittade ännu — kör en skanning
+          </div>
+        )}
+
+        {/* Manuellt tillagda */}
+        {manualItems?.length > 0 && (
+          <>
+            <div style={{ padding: "10px 16px 4px" }}>
+              <div
+                className="panel-label"
+                style={{ marginBottom: 0, color: "var(--green)" }}
+              >
+                Manuellt tillagda
+              </div>
+            </div>
+            {manualItems.map((m, i) => (
+              <div
+                key={i}
+                className="comp-variant"
+                style={{ color: "var(--green)" }}
+              >
+                <span>+ {m.code}</span>
+                <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                  s.{m.page}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* Varningar */}
+        {warnings.length > 0 &&
+          (() => {
+            const visibleWarnings = warnings.filter(
+              (_, i) => !dismissedWarnings.has(i),
+            );
+            if (visibleWarnings.length === 0) return null;
+            return (
+              <>
+                <div style={{ padding: "10px 16px 4px" }}>
+                  <div
+                    className="panel-label"
+                    style={{ marginBottom: 0, color: "var(--red)" }}
+                  >
+                    ⚠ Kontrollera manuellt ({visibleWarnings.length})
+                  </div>
+                </div>
+                {warnings.map((w, i) => {
+                  if (dismissedWarnings.has(i)) return null;
+
+                  // Best-guess code: fragment + first nearby text that looks like a code tail
+                  const tail =
+                    (w.nearby_text || []).find((t) => /^\d{1,4}[-/]/.test(t)) ||
+                    "";
+                  const guess = (w.fragment + tail).toUpperCase();
+                  const isConfirming = confirming?.index === i;
+
+                  return (
+                    <div
+                      key={i}
+                      className="warning-item"
+                      style={{
+                        flexDirection: "column",
+                        gap: 6,
+                        alignItems: "stretch",
+                      }}
+                    >
+                      {!isConfirming && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 6,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flex: 1,
+                            }}
+                          >
+                            <span className="warning-dot">▸</span>
+                            <div className="warning-text">
+                              <span className="warning-code">{w.fragment}</span>
+                              {" — etikett kan vara dold på sida "}
+                              {w.page}
+                            </div>
+                          </div>
+                          <div
+                            style={{ display: "flex", gap: 4, flexShrink: 0 }}
+                          >
+                            <button
+                              className="btn btn-ghost"
+                              style={{
+                                fontSize: 10,
+                                padding: "2px 7px",
+                                color: "var(--green)",
+                                borderColor: "var(--green)",
+                              }}
+                              onClick={() =>
+                                setConfirming({ index: i, code: guess })
+                              }
+                              title="Bekräfta som komponent"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ fontSize: 10, padding: "2px 7px" }}
+                              onClick={() => {
+                                setDismissedWarnings(
+                                  (prev) => new Set([...prev, i]),
+                                );
+                                if (confirming?.index === i)
+                                  setConfirming(null);
+                              }}
+                              title="Ignorera"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {isConfirming && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                            padding: "2px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "var(--text-dim)",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            Bekräfta kod för sida {w.page}:
+                          </div>
+                          <input
+                            className="input"
+                            value={confirming.code}
+                            onChange={(e) =>
+                              setConfirming((prev) => ({
+                                ...prev,
+                                code: e.target.value.toUpperCase(),
+                              }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && confirming.code.trim()) {
+                                onManualAdd({
+                                  code: confirming.code.trim(),
+                                  base_code: confirming.code
+                                    .trim()
+                                    .split(/[-/]/)[0],
+                                  page: w.page,
+                                  x0: w.x0,
+                                  y0: w.y0,
+                                  x1: w.x1,
+                                  y1: w.y1,
+                                });
+                                setDismissedWarnings(
+                                  (prev) => new Set([...prev, i]),
+                                );
+                                setConfirming(null);
+                              }
+                              if (e.key === "Escape") setConfirming(null);
+                            }}
+                            autoFocus
+                            style={{ fontFamily: "var(--font-mono)" }}
+                          />
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              className="btn btn-green"
+                              style={{ flex: 1 }}
+                              disabled={!confirming.code.trim()}
+                              onClick={() => {
+                                onManualAdd({
+                                  code: confirming.code.trim(),
+                                  base_code: confirming.code
+                                    .trim()
+                                    .split(/[-/]/)[0],
+                                  page: w.page,
+                                  x0: w.x0,
+                                  y0: w.y0,
+                                  x1: w.x1,
+                                  y1: w.y1,
+                                });
+                                setDismissedWarnings(
+                                  (prev) => new Set([...prev, i]),
+                                );
+                                setConfirming(null);
+                              }}
+                            >
+                              ✓ Lägg till
+                            </button>
+                            <button
+                              className="btn btn-ghost"
+                              onClick={() => setConfirming(null)}
+                            >
+                              Avbryt
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
+      </div>
 
       {/* ── Lägg till manuellt ── */}
       <div
@@ -386,11 +549,11 @@ export default function ComponentPanel({
       >
         {!showManualForm ? (
           <button
-            className="btn btn-full"
+            className="btn btn-green btn-full"
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
-            Lägg till komponent manuellt
+            + Lägg till komponent manuellt
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -447,7 +610,7 @@ export default function ComponentPanel({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                className="btn"
+                className="btn btn-green"
                 style={{ flex: 1 }}
                 onClick={handleManualAdd}
               >
@@ -463,6 +626,58 @@ export default function ComponentPanel({
           </div>
         )}
       </div>
+
+      {/* ── Varning: inskannad ritning ── */}
+      {scanResult?.is_scanned && (
+        <div
+          style={{
+            margin: "0 16px 12px",
+            padding: "10px 12px",
+            background: "var(--red-dim)",
+            border: "1px solid var(--red)",
+            borderRadius: "var(--radius)",
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-start",
+          }}
+        >
+          <span style={{ color: "var(--red)", flexShrink: 0, marginTop: 1 }}>
+            ⚠
+          </span>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              style={{
+                color: "var(--red)",
+                fontFamily: "var(--font-mono)",
+                fontWeight: 600,
+              }}
+            >
+              Inskannad ritning
+            </span>
+            <br />
+            Denna PDF verkar vara en inskannad bild och innehåller ingen sökbar
+            text — komponenter kan inte detekteras automatiskt. Lägg till
+            manuellt eller kontakta den som skapat ritningen för en digital
+            version.
+          </div>
+        </div>
+      )}
+
+      {/* ── Projektskanning ── */}
+      <BatchScanSection
+        projectName={projectName}
+        projectDrawings={projectDrawings}
+        batchState={batchState}
+        onBatchScan={onBatchScan}
+        onBatchAbort={onBatchAbort}
+        onSelectDrawing={onSelectDrawing}
+      />
     </div>
   );
 }

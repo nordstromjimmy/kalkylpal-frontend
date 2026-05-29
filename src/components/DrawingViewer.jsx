@@ -191,10 +191,7 @@ export default function DrawingViewer({
       <div className="viewer">
         <div className="viewer-empty">
           <div className="viewer-empty-icon">📐</div>
-          <div>Välj en ritning för att börja</div>
-          <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
-            Ladda upp PDF-filer via sidopanelen
-          </div>
+          <div>Välj ett projekt för att börja</div>
         </div>
       </div>
     );
@@ -310,12 +307,12 @@ export default function DrawingViewer({
 
         <span className="viewer-page-info" style={{ marginLeft: 8 }}>
           {visibleComponents.length} komponenter
-          {visibleWarnings.length > 0 && (
+          {/*           {visibleWarnings.length > 0 && (
             <span style={{ color: "var(--red)", marginLeft: 6 }}>
               ⚠ {visibleWarnings.length} varning
               {visibleWarnings.length > 1 ? "ar" : ""}
             </span>
-          )}
+          )} */}
         </span>
       </div>
 

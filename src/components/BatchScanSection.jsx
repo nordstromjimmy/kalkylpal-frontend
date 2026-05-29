@@ -20,7 +20,7 @@ export default function BatchScanSection({
   onBatchAbort,
   onSelectDrawing,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [codesInput, setCodesInput] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -510,30 +510,12 @@ export default function BatchScanSection({
                   >
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 10,
                         color: "var(--text-dim)",
                         fontFamily: "var(--font-mono)",
                       }}
                     >
                       RESULTAT — {grandTotal} st
-                    </div>
-                  </div>
-                  {/* Results header with export buttons */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "var(--text-dim)",
-                        fontFamily: "var(--font-mono)",
-                      }}
-                    >
-                      Ladda ner resultat som
                     </div>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
@@ -541,14 +523,14 @@ export default function BatchScanSection({
                         style={{ fontSize: 10, padding: "2px 7px" }}
                         onClick={exportExcel}
                       >
-                        Excel
+                        ↓ Excel
                       </button>
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 10, padding: "2px 7px" }}
                         onClick={exportPDF}
                       >
-                        PDF
+                        ↓ PDF
                       </button>
                     </div>
                   </div>
@@ -568,7 +550,7 @@ export default function BatchScanSection({
                         Skapar bilder…
                       </>
                     ) : (
-                      "Ladda ner alla ritningar med markeringar"
+                      "↓ Ladda ner alla ritningar med markeringar"
                     )}
                   </button>
 
@@ -615,7 +597,7 @@ export default function BatchScanSection({
                   {/* Scrollable results list */}
                   <div
                     style={{
-                      maxHeight: 420,
+                      maxHeight: 380,
                       overflowY: "auto",
                       border: "1px solid var(--border)",
                       borderRadius: "var(--radius)",
@@ -633,9 +615,7 @@ export default function BatchScanSection({
                         >
                           {/* Drawing header — click to navigate + scan */}
                           <div
-                            onClick={() =>
-                              drawing && onSelectDrawing(drawing, resultCodes)
-                            }
+                            onClick={() => drawing && onSelectDrawing(drawing)}
                             style={{
                               display: "flex",
                               justifyContent: "space-between",
