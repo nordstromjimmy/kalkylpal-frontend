@@ -174,3 +174,11 @@ export async function getBatchResult(projectId) {
   if (!res.ok) throw new Error("Failed to load batch result");
   return res.json();
 }
+
+export async function clearProjectData(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/clear-data`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to clear project data");
+  return res.json();
+}

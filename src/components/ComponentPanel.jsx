@@ -40,6 +40,9 @@ export default function ComponentPanel({
   onBatchScan,
   onBatchAbort,
   onSelectDrawing,
+  onResetAll,
+  onResetProject,
+  onDismissWarning,
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [isScanOpen, setIsScanOpen] = useState(true);
@@ -94,10 +97,16 @@ export default function ComponentPanel({
 
   // Summary shows project-wide totals when a batch scan exists,
   // otherwise falls back to the currently selected drawing's scan.
-  const autoTotal = batchState?.results
+  // When batchState exists, manual items are already included in batchState totals
+  // (added in handleManualAdd), so subtract manualItems.length to avoid double counting.
+  const batchTotal = batchState?.results
     ? Object.values(batchState.results).reduce((s, r) => s + r.total, 0)
-    : scanResult?.total_found || 0;
+    : null;
   const manualTotal = manualItems?.length || 0;
+  const autoTotal =
+    batchTotal !== null
+      ? batchTotal - manualTotal
+      : scanResult?.total_found || 0;
   const grandTotal = autoTotal + manualTotal;
   const hasResults = scanResult !== null;
 
@@ -120,7 +129,37 @@ export default function ComponentPanel({
     <div className="component-panel">
       {/* ── Sammanfattning ── */}
       <div className="panel-section">
-        <div className="panel-label">Sammanfattning</div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 10,
+          }}
+        >
+          <div className="panel-label" style={{ marginBottom: 0 }}>
+            Sammanfattning
+          </div>
+          {(drawingId ? batchState?.results || scanResult : onResetProject) && (
+            <button
+              className="btn btn-ghost"
+              style={{
+                fontSize: 10,
+                padding: "2px 8px",
+                color: "var(--red)",
+                borderColor: "var(--red)",
+              }}
+              onClick={drawingId ? onResetAll : onResetProject}
+              title={
+                drawingId
+                  ? "Rensa resultat för vald ritning"
+                  : "Rensa alla ritningar i projektet"
+              }
+            >
+              {drawingId ? "Rensa ritning" : "Rensa alla ritningar"}
+            </button>
+          )}
+        </div>
         <div className="stat-row">
           <span className="stat-label">Automatiskt hittade</span>
           <span className="stat-value">{autoTotal}</span>
@@ -440,6 +479,12 @@ export default function ComponentPanel({
                                 setDismissedWarnings(
                                   (prev) => new Set([...prev, i]),
                                 );
+                                if (onDismissWarning && drawingId)
+                                  onDismissWarning({
+                                    drawingId,
+                                    x0: w.x0,
+                                    y0: w.y0,
+                                  });
                                 if (confirming?.index === i)
                                   setConfirming(null);
                               }}
@@ -493,6 +538,12 @@ export default function ComponentPanel({
                                 setDismissedWarnings(
                                   (prev) => new Set([...prev, i]),
                                 );
+                                if (onDismissWarning && drawingId)
+                                  onDismissWarning({
+                                    drawingId,
+                                    x0: w.x0,
+                                    y0: w.y0,
+                                  });
                                 setConfirming(null);
                               }
                               if (e.key === "Escape") setConfirming(null);
@@ -520,6 +571,12 @@ export default function ComponentPanel({
                                 setDismissedWarnings(
                                   (prev) => new Set([...prev, i]),
                                 );
+                                if (onDismissWarning && drawingId)
+                                  onDismissWarning({
+                                    drawingId,
+                                    x0: w.x0,
+                                    y0: w.y0,
+                                  });
                                 setConfirming(null);
                               }}
                             >
@@ -541,6 +598,15 @@ export default function ComponentPanel({
             );
           })()}
       </div>
+      {/* ── Projektskanning ── */}
+      <BatchScanSection
+        projectName={projectName}
+        projectDrawings={projectDrawings}
+        batchState={batchState}
+        onBatchScan={onBatchScan}
+        onBatchAbort={onBatchAbort}
+        onSelectDrawing={onSelectDrawing}
+      />
 
       {/* ── Lägg till manuellt ── */}
       <div
@@ -668,16 +734,6 @@ export default function ComponentPanel({
           </div>
         </div>
       )}
-
-      {/* ── Projektskanning ── */}
-      <BatchScanSection
-        projectName={projectName}
-        projectDrawings={projectDrawings}
-        batchState={batchState}
-        onBatchScan={onBatchScan}
-        onBatchAbort={onBatchAbort}
-        onSelectDrawing={onSelectDrawing}
-      />
     </div>
   );
 }

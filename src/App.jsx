@@ -17,6 +17,7 @@ import {
   clearDrawingData,
   saveBatchResult,
   getBatchResult,
+  clearProjectData,
 } from "./api";
 
 export default function App() {
@@ -170,11 +171,24 @@ export default function App() {
           getManualItems(drawing.id),
         ]);
         if (savedResult) {
-          setScanResult(savedResult);
+          // Use String() to ensure key matches regardless of number vs string type
+          const batchWarnings =
+            batchState?.results?.[String(drawing.id)]?.warnings || [];
+          setScanResult({ ...savedResult, warnings: batchWarnings });
           const pages = Object.values(savedResult.components)
             .flat()
             .map((c) => c.page);
           if (pages.length > 0) setPageCount(Math.max(...pages));
+        } else {
+          // No scan result in DB — check if batchState has warnings for this drawing
+          const batchRow = batchState?.results?.[String(drawing.id)];
+          if (batchRow?.warnings?.length > 0) {
+            setScanResult({
+              total_found: 0,
+              components: {},
+              warnings: batchRow.warnings,
+            });
+          }
         }
         setManualItems(savedManuals || []);
       } catch {
@@ -262,26 +276,89 @@ export default function App() {
   }
 
   async function handleManualAdd(item) {
+    // 1. Save to DB and add to local manualItems list
     if (selectedDrawing) {
       try {
         const saved = await addManualItem(selectedDrawing.id, item);
         setManualItems((prev) => [...prev, { ...item, id: saved.id }]);
       } catch {
-        setManualItems((prev) => [...prev, item]); // fallback if DB save fails
+        setManualItems((prev) => [...prev, item]);
       }
     } else {
       setManualItems((prev) => [...prev, item]);
+    }
+
+    // 2. Merge into batchState so the item appears in Excel/PDF exports.
+    // We add to breakdown and components but NOT to total, so Sammanfattning
+    // doesn't double-count (it sums batchState.total + manualItems.length separately).
+    if (selectedDrawing && batchState?.results) {
+      setBatchState((prev) => {
+        if (!prev?.results) return prev;
+        const drawingId = selectedDrawing.id;
+        const row = prev.results[drawingId];
+        if (!row) return prev;
+
+        // Add to breakdown: { base_code: { full_code: count } }
+        const newBreakdown = { ...row.breakdown };
+        if (!newBreakdown[item.base_code]) newBreakdown[item.base_code] = {};
+        newBreakdown[item.base_code] = {
+          ...newBreakdown[item.base_code],
+          [item.code]: (newBreakdown[item.base_code][item.code] || 0) + 1,
+        };
+
+        // Add to components array (used for bulk PNG download highlight boxes)
+        const newComponents = [
+          ...(row.components || []),
+          {
+            code: item.code,
+            base_code: item.base_code,
+            page: item.page,
+            x0: item.x0,
+            y0: item.y0,
+            x1: item.x1,
+            y1: item.y1,
+          },
+        ];
+
+        const updated = {
+          ...prev,
+          results: {
+            ...prev.results,
+            [drawingId]: {
+              ...row,
+              breakdown: newBreakdown,
+              components: newComponents,
+              total: row.total + 1,
+            },
+          },
+        };
+
+        if (selectedProject) {
+          saveBatchResult(selectedProject.id, updated).catch(() => {});
+        }
+        return updated;
+      });
     }
   }
 
   // Merges a new batch scan into the existing batchState.
   // New codes overwrite old for the same drawings; drawings not in the new scan keep their results.
+  // Uses startsWith matching so searching "TD" correctly supersedes "TD201", "TD301" etc.
   function mergeBatchState(existing, newScan) {
     if (!existing || !existing.results) return { ...newScan, status: "done" };
 
-    const allCodes = [
-      ...new Set([...(existing.codes || []), ...(newScan.codes || [])]),
-    ];
+    // Remove existing codes that are subsumed by any new code (e.g. "TD" supersedes "TD201").
+    // Keep codes that have no overlap with the new search.
+    const newCodes = newScan.codes || [];
+    const filteredOldCodes = (existing.codes || []).filter(
+      (oldCode) =>
+        !newCodes.some(
+          (newCode) =>
+            oldCode.startsWith(newCode) || newCode.startsWith(oldCode),
+        ),
+    );
+    const allCodes = [...new Set([...filteredOldCodes, ...newCodes])];
+
     const mergedResults = { ...(existing.results || {}) };
 
     for (const [drawingId, newRow] of Object.entries(newScan.results || {})) {
@@ -289,15 +366,29 @@ export default function App() {
       if (!existingRow) {
         mergedResults[drawingId] = newRow;
       } else {
-        // Merge breakdowns: new codes overwrite old, other codes remain
+        // Remove existing breakdown keys subsumed by any new code
+        const cleanedBreakdown = Object.fromEntries(
+          Object.entries(existingRow.breakdown || {}).filter(
+            ([oldKey]) =>
+              !newCodes.some(
+                (newCode) =>
+                  oldKey.startsWith(newCode) || newCode.startsWith(oldKey),
+              ),
+          ),
+        );
         const mergedBreakdown = {
-          ...(existingRow.breakdown || {}),
+          ...cleanedBreakdown,
           ...(newRow.breakdown || {}),
         };
 
-        // Merge components: remove old instances for the newly scanned codes, add new ones
+        // Remove old component instances for any base_code matched by the new search codes,
+        // then add the fresh instances. Uses startsWith so "TD" removes TD201, TD301 etc.
         const existingComponents = (existingRow.components || []).filter(
-          (c) => !newScan.codes.some((code) => c.base_code === code),
+          (c) =>
+            !newCodes.some(
+              (code) =>
+                c.base_code.startsWith(code) || code.startsWith(c.base_code),
+            ),
         );
         const mergedComponents = [
           ...existingComponents,
@@ -371,6 +462,7 @@ export default function App() {
       // Also keep raw instances (x/y coordinates) for image rendering.
       const breakdown = {};
       const allInstances = [];
+      const allWarnings = [];
       let total = 0;
       for (const code of codes) {
         if (batchAbortRef.current) break;
@@ -385,6 +477,11 @@ export default function App() {
           }
           breakdown[code] = variantCounts;
           total += res.total_found;
+          for (const w of res.warnings || []) {
+            if (!allWarnings.find((e) => e.x0 === w.x0 && e.y0 === w.y0)) {
+              allWarnings.push(w);
+            }
+          }
         } catch {
           breakdown[code] = {};
         }
@@ -395,6 +492,7 @@ export default function App() {
         breakdown,
         total,
         components: allInstances,
+        warnings: allWarnings,
         pageDimensions,
       };
     }
@@ -424,6 +522,89 @@ export default function App() {
   function handleBatchAbort() {
     batchAbortRef.current = true;
     setBatchState((prev) => (prev ? { ...prev, status: "done" } : null));
+  }
+
+  // Remove a warning from batchState (by drawing id + position) and persist.
+  // This is the single source of truth — no separate dismissed-set needed.
+  function handleDismissWarning({ drawingId, x0, y0 }) {
+    setBatchState((prev) => {
+      if (!prev?.results) return prev;
+      const row = prev.results[drawingId];
+      if (!row) return prev;
+      const updated = {
+        ...prev,
+        results: {
+          ...prev.results,
+          [drawingId]: {
+            ...row,
+            warnings: (row.warnings || []).filter(
+              (w) => !(w.x0 === x0 && w.y0 === y0),
+            ),
+          },
+        },
+      };
+      // Persist immediately so warning doesn't return on refresh
+      if (selectedProject) {
+        saveBatchResult(selectedProject.id, updated).catch(() => {});
+      }
+      return updated;
+    });
+    // Also remove from current scanResult so ComponentPanel warning disappears
+    setScanResult((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        warnings: (prev.warnings || []).filter(
+          (w) => !(w.x0 === x0 && w.y0 === y0),
+        ),
+      };
+    });
+  }
+
+  async function handleResetAll() {
+    if (!selectedDrawing) return;
+
+    // Clear scan result and manual items for current drawing only
+    setScanResult(null);
+    setManualItems([]);
+    setHighlightCode(null);
+
+    // Remove only this drawing from batchState, keeping other drawings intact
+    if (batchState?.results) {
+      setBatchState((prev) => {
+        if (!prev?.results) return prev;
+        const updatedResults = { ...prev.results };
+        delete updatedResults[selectedDrawing.id];
+        const updated = { ...prev, results: updatedResults };
+        // Persist updated batchState without this drawing
+        if (selectedProject) {
+          saveBatchResult(selectedProject.id, updated).catch(() => {});
+        }
+        return updated;
+      });
+    }
+
+    // Clear DB scan data for this drawing only
+    try {
+      await clearDrawingData(selectedDrawing.id);
+    } catch {
+      /* non-critical */
+    }
+    showStatus("Ritningens resultat rensade");
+  }
+
+  async function handleResetProject() {
+    if (!selectedProject) return;
+    setBatchState(null);
+    setScanResult(null);
+    setManualItems([]);
+    setHighlightCode(null);
+    try {
+      await clearProjectData(selectedProject.id);
+    } catch (e) {
+      console.error("clearProjectData failed:", e);
+    }
+    showStatus("Alla resultat i projektet rensade");
   }
 
   function showStatus(msg) {
@@ -523,6 +704,9 @@ export default function App() {
           onSelectDrawing={handleSelectDrawing}
           onHighlight={setHighlightCode}
           onManualAdd={handleManualAdd}
+          onResetAll={handleResetAll}
+          onResetProject={selectedProject ? handleResetProject : null}
+          onDismissWarning={handleDismissWarning}
         />
       </div>
 

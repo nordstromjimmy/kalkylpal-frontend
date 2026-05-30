@@ -510,27 +510,44 @@ export default function BatchScanSection({
                   >
                     <div
                       style={{
-                        fontSize: 10,
+                        fontSize: 11,
                         color: "var(--text-dim)",
                         fontFamily: "var(--font-mono)",
                       }}
                     >
                       RESULTAT — {grandTotal} st
                     </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-dim)",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      Ladda ner resultat som
+                    </div>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
-                        className="btn btn-ghost"
+                        className="btn"
                         style={{ fontSize: 10, padding: "2px 7px" }}
                         onClick={exportExcel}
                       >
-                        ↓ Excel
+                        Excel
                       </button>
                       <button
-                        className="btn btn-ghost"
+                        className="btn"
                         style={{ fontSize: 10, padding: "2px 7px" }}
                         onClick={exportPDF}
                       >
-                        ↓ PDF
+                        PDF
                       </button>
                     </div>
                   </div>
@@ -550,7 +567,7 @@ export default function BatchScanSection({
                         Skapar bilder…
                       </>
                     ) : (
-                      "↓ Ladda ner alla ritningar med markeringar"
+                      "Ladda ner alla ritningar med markeringar"
                     )}
                   </button>
 
@@ -655,7 +672,7 @@ export default function BatchScanSection({
                                 marginLeft: 8,
                               }}
                             >
-                              {row.total} st →
+                              {row.total} st
                             </span>
                           </div>
 
@@ -826,6 +843,116 @@ export default function BatchScanSection({
                         </span>
                       </div>
                     </div>
+
+                    {/* All warnings across all drawings */}
+                    {(() => {
+                      const allWarnings = allRows.flatMap(([drawingId, row]) =>
+                        (row.warnings || []).map((w) => ({
+                          ...w,
+                          filename: row.filename,
+                          drawingId, // keep string key for batchState lookup
+                          drawing: projectDrawings.find(
+                            (d) => d.id === parseInt(drawingId),
+                          ),
+                        })),
+                      );
+                      if (allWarnings.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            padding: "8px 10px 4px",
+                            borderTop: "1px solid var(--border)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: 9,
+                              fontWeight: 600,
+                              letterSpacing: "0.12em",
+                              textTransform: "uppercase",
+                              color: "var(--red)",
+                              marginBottom: 6,
+                            }}
+                          >
+                            ⚠ Kontrollera manuellt ({allWarnings.length})
+                          </div>
+                          {allWarnings.map((w, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "4px 0",
+                                borderBottom: "1px solid var(--border)",
+                                gap: 8,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <span
+                                  style={{ color: "var(--red)", flexShrink: 0 }}
+                                >
+                                  ▸
+                                </span>
+                                <span
+                                  style={{
+                                    fontFamily: "var(--font-mono)",
+                                    fontSize: 10,
+                                    color: "var(--red)",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {w.fragment}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color: "var(--text-dim)",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  — {w.filename}, sida {w.page}
+                                </span>
+                              </div>
+                              {/* Navigate to drawing — pass drawingId so handler can load warnings from batchState */}
+                              <button
+                                className="btn btn-ghost"
+                                style={{
+                                  fontSize: 10,
+                                  padding: "2px 7px",
+                                  flexShrink: 0,
+                                }}
+                                onClick={() => {
+                                  if (w.drawing) {
+                                    onSelectDrawing(w.drawing);
+                                  } else {
+                                    // Drawing object not found in projectDrawings (stale render),
+                                    // reconstruct a minimal object so navigation still works
+                                    onSelectDrawing({
+                                      id: parseInt(w.drawingId),
+                                      filename: w.filename,
+                                    });
+                                  }
+                                }}
+                                title="Öppna ritning för att bekräfta"
+                              >
+                                →
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
