@@ -191,7 +191,7 @@ export default function DrawingViewer({
       <div className="viewer">
         <div className="viewer-empty">
           <div className="viewer-empty-icon">📐</div>
-          <div>Välj ett projekt för att börja</div>
+          <div>Välj ett projekt och ritning för att börja</div>
         </div>
       </div>
     );
@@ -289,7 +289,7 @@ export default function DrawingViewer({
         </div>
 
         <button
-          className="btn"
+          className="btn btn-ghost"
           style={{ marginLeft: "auto" }}
           onClick={handleDownload}
           disabled={!imageLoaded || isDownloading}
@@ -301,19 +301,9 @@ export default function DrawingViewer({
               style={{ width: 12, height: 12, borderWidth: 2 }}
             />
           ) : (
-            "Ladda ner"
+            "Ladda ner ritning"
           )}
         </button>
-
-        <span className="viewer-page-info" style={{ marginLeft: 8 }}>
-          {visibleComponents.length} komponenter
-          {/*           {visibleWarnings.length > 0 && (
-            <span style={{ color: "var(--red)", marginLeft: 6 }}>
-              ⚠ {visibleWarnings.length} varning
-              {visibleWarnings.length > 1 ? "ar" : ""}
-            </span>
-          )} */}
-        </span>
       </div>
 
       {/* Loading spinner — centered in the viewer area, outside the drawing wrap */}

@@ -161,7 +161,7 @@ export default function Sidebar({
         ))}
         <div style={{ padding: "8px 16px 4px" }}>
           <button className="btn btn-ghost btn-full" onClick={onNewProject}>
-            + Nytt projekt
+            Nytt projekt
           </button>
         </div>
       </div>
@@ -178,9 +178,7 @@ export default function Sidebar({
         }}
       >
         <div className="sidebar-label">
-          {selectedProject
-            ? `Ritningar — ${selectedProject.name}`
-            : "Ritningar"}
+          {selectedProject ? `Ritningar — ${selectedProject.name}` : ""}
         </div>
 
         {!selectedProject ? (
@@ -191,9 +189,7 @@ export default function Sidebar({
               fontSize: 11,
               fontFamily: "var(--font-mono)",
             }}
-          >
-            Välj ett projekt
-          </div>
+          ></div>
         ) : (
           <>
             <div className="sidebar-scroll">

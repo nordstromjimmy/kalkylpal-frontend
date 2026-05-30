@@ -36,6 +36,7 @@ export default function ComponentPanel({
   onManualAdd,
   projectName = "Projekt",
   projectDrawings = [],
+  hasProject = false,
   batchState = null,
   onBatchScan,
   onBatchAbort,
@@ -341,7 +342,7 @@ export default function ComponentPanel({
           </>
         )}
 
-        {!drawingId && (
+        {!hasProject && (
           <div
             style={{
               padding: 16,
@@ -350,7 +351,7 @@ export default function ComponentPanel({
               fontFamily: "var(--font-mono)",
             }}
           >
-            Välj en ritning och kör en skanning
+            INFO: Välj eller skapa ett projekt
           </div>
         )}
 
@@ -619,7 +620,7 @@ export default function ComponentPanel({
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
-            + Lägg till komponent manuellt
+            Lägg till komponent manuellt
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -628,7 +629,7 @@ export default function ComponentPanel({
             </div>
             <input
               className="input"
-              placeholder="Kod, t.ex. TD201-160"
+              placeholder="t.ex. TD201-160"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}

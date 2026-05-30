@@ -620,11 +620,18 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <span className="topbar-logo">
-            KALKYL<span>PAL</span>
-          </span>
+          <a
+            href="/"
+            style={{
+              textDecoration: "none",
+            }}
+          >
+            <span className="topbar-logo">
+              KALKYL<span>PAL</span>
+            </span>
+          </a>
           <div className="topbar-sep" />
-          <span className="topbar-sub">VVS Component Scanner</span>
+          <span className="topbar-sub">Din Kalkyl Kompis</span>
           {statusMsg && (
             <>
               <div className="topbar-sep" />
@@ -698,6 +705,7 @@ export default function App() {
           }}
           projectName={selectedProject?.name || "Projekt"}
           projectDrawings={selectedProject?.drawings || []}
+          hasProject={!!selectedProject}
           batchState={batchState}
           onBatchScan={handleBatchScan}
           onBatchAbort={handleBatchAbort}
@@ -716,10 +724,10 @@ export default function App() {
           onClick={() => setShowNewProjectModal(false)}
         >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">// New Project</div>
+            <div className="modal-title">Nytt Projekt</div>
             <input
               className="input"
-              placeholder="Project name"
+              placeholder="Projektnamn"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
@@ -727,7 +735,7 @@ export default function App() {
             />
             <input
               className="input"
-              placeholder="Description (optional)"
+              placeholder="Beskrivning (frivilligt)"
               value={newProjectDesc}
               onChange={(e) => setNewProjectDesc(e.target.value)}
             />
@@ -736,10 +744,10 @@ export default function App() {
                 className="btn btn-ghost"
                 onClick={() => setShowNewProjectModal(false)}
               >
-                Cancel
+                Avbryt
               </button>
               <button className="btn btn-amber" onClick={handleCreateProject}>
-                Create
+                Skapa
               </button>
             </div>
           </div>
