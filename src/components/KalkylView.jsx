@@ -66,10 +66,12 @@ export default function KalkylView({
     });
   }
   function fmtHours(n) {
-    return n.toLocaleString("sv-SE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    const totalMins = Math.round(n * 60);
+    const h = Math.floor(totalMins / 60);
+    const min = totalMins % 60;
+    if (h === 0) return `${min} min`;
+    if (min === 0) return `${h} h`;
+    return `${h} h ${min} min`;
   }
 
   // ── Export Excel ────────────────────────────────────────────────────────────
@@ -352,7 +354,7 @@ export default function KalkylView({
         <div style={styles.footerDivider} />
         <div style={styles.footerItem}>
           <span style={styles.footerLabel}>Total tid</span>
-          <span style={styles.footerValue}>{fmtHours(grandTotalHours)} h</span>
+          <span style={styles.footerValue}>{fmtHours(grandTotalHours)}</span>
         </div>
         <div style={styles.footerDivider} />
         <div style={styles.footerItem}>
