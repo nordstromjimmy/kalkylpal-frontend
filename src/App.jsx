@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar";
 import DrawingViewer from "./components/DrawingViewer";
+import KalkylView from "./components/KalkylView";
 import ComponentPanel from "./components/ComponentPanel";
 import {
   getProjects,
@@ -38,6 +39,8 @@ export default function App() {
   const [batchState, setBatchState] = useState(null);
   // Abort flag — set to true to stop the batch loop after the current drawing
   const batchAbortRef = useRef(false);
+  const [step, setStep] = useState("scan"); // "scan" | "kalkyl"
+  const [kalkylData, setKalkylData] = useState({}); // { "TD201-160": { price: "", hours: "" } }
 
   useEffect(() => {
     loadProjects();
@@ -66,6 +69,8 @@ export default function App() {
     setManualItems([]);
     setPageNumber(1);
     setHighlightCode(null);
+    setStep("scan");
+    setKalkylData({});
     // Restore saved batch state for this project
     try {
       const saved = await getBatchResult(project.id);
@@ -607,6 +612,13 @@ export default function App() {
     showStatus("Alla resultat i projektet rensade");
   }
 
+  function handleKalkylChange(variant, field, value) {
+    setKalkylData((prev) => ({
+      ...prev,
+      [variant]: { ...(prev[variant] || {}), [field]: value },
+    }));
+  }
+
   function showStatus(msg) {
     setStatusMsg(msg);
     setTimeout(() => setStatusMsg(""), 3500);
@@ -620,18 +632,61 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <a
-            href="/"
-            style={{
-              textDecoration: "none",
-            }}
-          >
-            <span className="topbar-logo">
-              KALKYL<span>PAL</span>
-            </span>
-          </a>
+          <span className="topbar-logo">
+            KALKYL<span>PAL</span>
+          </span>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
+          {batchState?.results && (
+            <>
+              <div className="topbar-sep" />
+              <div
+                style={{
+                  display: "flex",
+                  gap: 0,
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  className="btn"
+                  onClick={() => setStep("scan")}
+                  style={{
+                    borderRadius: 0,
+                    border: "none",
+                    padding: "4px 14px",
+                    fontSize: 11,
+                    fontFamily: "var(--font-mono)",
+                    background:
+                      step === "scan" ? "var(--ui-white)" : "transparent",
+                    color: step === "scan" ? "var(--bg-0)" : "var(--text-dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Steg 1 — Skanning
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setStep("kalkyl")}
+                  style={{
+                    borderRadius: 0,
+                    border: "none",
+                    padding: "4px 14px",
+                    fontSize: 11,
+                    fontFamily: "var(--font-mono)",
+                    background:
+                      step === "kalkyl" ? "var(--ui-white)" : "transparent",
+                    color:
+                      step === "kalkyl" ? "var(--bg-0)" : "var(--text-dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Steg 2 — Kalkyl
+                </button>
+              </div>
+            </>
+          )}
           {statusMsg && (
             <>
               <div className="topbar-sep" />
@@ -660,62 +715,73 @@ export default function App() {
           onDeleteProject={handleDeleteProject}
         />
 
-        <DrawingViewer
-          drawingId={selectedDrawing?.id}
-          pageNumber={pageNumber}
-          pageCount={pageCount}
-          pageDimensions={pageDimensions}
-          components={allComponents}
-          warnings={scanResult?.warnings || []}
-          manualItems={manualItems}
-          highlightCode={highlightCode}
-          onPageChange={setPageNumber}
-          onPrevDrawing={handlePrevDrawing}
-          onNextDrawing={handleNextDrawing}
-          hasPrevDrawing={(() => {
-            const d = selectedProject?.drawings || [];
-            const i = d.findIndex((x) => x.id === selectedDrawing?.id);
-            return i > 0;
-          })()}
-          hasNextDrawing={(() => {
-            const d = selectedProject?.drawings || [];
-            const i = d.findIndex((x) => x.id === selectedDrawing?.id);
-            return i >= 0 && i < d.length - 1;
-          })()}
-        />
+        {step === "scan" ? (
+          <>
+            <DrawingViewer
+              drawingId={selectedDrawing?.id}
+              pageNumber={pageNumber}
+              pageCount={pageCount}
+              pageDimensions={pageDimensions}
+              components={allComponents}
+              warnings={scanResult?.warnings || []}
+              manualItems={manualItems}
+              highlightCode={highlightCode}
+              onPageChange={setPageNumber}
+              onPrevDrawing={handlePrevDrawing}
+              onNextDrawing={handleNextDrawing}
+              hasPrevDrawing={(() => {
+                const d = selectedProject?.drawings || [];
+                const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+                return i > 0;
+              })()}
+              hasNextDrawing={(() => {
+                const d = selectedProject?.drawings || [];
+                const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+                return i >= 0 && i < d.length - 1;
+              })()}
+            />
 
-        <ComponentPanel
-          drawingId={selectedDrawing?.id}
-          scanResult={scanResult}
-          manualItems={manualItems}
-          highlightCode={highlightCode}
-          loading={loading}
-          onScan={handleScan}
-          onClearScan={async () => {
-            setScanResult(null);
-            setManualItems([]);
-            setHighlightCode(null);
-            if (selectedDrawing) {
-              try {
-                await clearDrawingData(selectedDrawing.id);
-              } catch {
-                /* non-critical */
-              }
-            }
-          }}
-          projectName={selectedProject?.name || "Projekt"}
-          projectDrawings={selectedProject?.drawings || []}
-          hasProject={!!selectedProject}
-          batchState={batchState}
-          onBatchScan={handleBatchScan}
-          onBatchAbort={handleBatchAbort}
-          onSelectDrawing={handleSelectDrawing}
-          onHighlight={setHighlightCode}
-          onManualAdd={handleManualAdd}
-          onResetAll={handleResetAll}
-          onResetProject={selectedProject ? handleResetProject : null}
-          onDismissWarning={handleDismissWarning}
-        />
+            <ComponentPanel
+              drawingId={selectedDrawing?.id}
+              scanResult={scanResult}
+              manualItems={manualItems}
+              highlightCode={highlightCode}
+              loading={loading}
+              onScan={handleScan}
+              onClearScan={async () => {
+                setScanResult(null);
+                setManualItems([]);
+                setHighlightCode(null);
+                if (selectedDrawing) {
+                  try {
+                    await clearDrawingData(selectedDrawing.id);
+                  } catch {
+                    /* non-critical */
+                  }
+                }
+              }}
+              projectName={selectedProject?.name || "Projekt"}
+              projectDrawings={selectedProject?.drawings || []}
+              hasProject={!!selectedProject}
+              batchState={batchState}
+              onBatchScan={handleBatchScan}
+              onBatchAbort={handleBatchAbort}
+              onSelectDrawing={handleSelectDrawing}
+              onHighlight={setHighlightCode}
+              onManualAdd={handleManualAdd}
+              onResetAll={handleResetAll}
+              onResetProject={selectedProject ? handleResetProject : null}
+              onDismissWarning={handleDismissWarning}
+            />
+          </>
+        ) : (
+          <KalkylView
+            projectName={selectedProject?.name || "Projekt"}
+            batchState={batchState}
+            kalkylData={kalkylData}
+            onKalkylChange={handleKalkylChange}
+          />
+        )}
       </div>
 
       {showNewProjectModal && (
