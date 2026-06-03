@@ -16,9 +16,9 @@ export default function Sidebar({
   const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState(null);
 
   function handleFileChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      onUpload(file);
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      files.forEach((file) => onUpload(file));
       e.target.value = "";
     }
   }
@@ -178,7 +178,9 @@ export default function Sidebar({
         }}
       >
         <div className="sidebar-label">
-          {selectedProject ? `Ritningar — ${selectedProject.name}` : ""}
+          {selectedProject
+            ? `Ritningar — ${selectedProject.name}`
+            : "Ritningar"}
         </div>
 
         {!selectedProject ? (
@@ -189,7 +191,9 @@ export default function Sidebar({
               fontSize: 11,
               fontFamily: "var(--font-mono)",
             }}
-          ></div>
+          >
+            Välj ett projekt
+          </div>
         ) : (
           <>
             <div className="sidebar-scroll">
@@ -305,6 +309,7 @@ export default function Sidebar({
               ref={fileInputRef}
               type="file"
               accept=".pdf"
+              multiple
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
