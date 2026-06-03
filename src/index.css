@@ -103,8 +103,11 @@ body::before {
   color: var(--ui-white);
 }
 .topbar-logo span {
-  color: var(--text-secondary);
-  font-weight: 400;
+  color: var(--amber);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
 }
 .topbar-sep {
   width: 1px;
