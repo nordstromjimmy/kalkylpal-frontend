@@ -652,11 +652,9 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <a href="/app" style={{ textDecoration: "none" }}>
-            <span className="topbar-logo">
-              KALKYL<span>PAL</span>
-            </span>
-          </a>
+          <span className="topbar-logo">
+            KALKYL<span>PAL</span>
+          </span>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
           {batchState?.results && (
@@ -804,12 +802,21 @@ export default function App() {
             />
           </>
         ) : (
-          <KalkylView
-            projectName={selectedProject?.name || "Projekt"}
-            batchState={batchState}
-            kalkylData={kalkylData}
-            onKalkylChange={handleKalkylChange}
-          />
+          <div
+            style={{
+              gridColumn: "2 / -1",
+              display: "flex",
+              background: "var(--bg-1)",
+              overflow: "hidden",
+            }}
+          >
+            <KalkylView
+              projectName={selectedProject?.name || "Projekt"}
+              batchState={batchState}
+              kalkylData={kalkylData}
+              onKalkylChange={handleKalkylChange}
+            />
+          </div>
         )}
       </div>
 
