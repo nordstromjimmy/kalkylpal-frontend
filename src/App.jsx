@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar";
 import DrawingViewer from "./components/DrawingViewer";
 import KalkylView from "./components/KalkylView";
+import ProjectInfoPanel from "./components/ProjectInfoPanel";
 import ComponentPanel from "./components/ComponentPanel";
 import {
   getProjects,
@@ -19,6 +20,7 @@ import {
   saveBatchResult,
   getBatchResult,
   clearProjectData,
+  updateProject,
 } from "./api";
 
 export default function App() {
@@ -612,6 +614,24 @@ export default function App() {
     showStatus("Alla resultat i projektet rensade");
   }
 
+  async function handleUpdateProject(data) {
+    if (!selectedProject) return;
+    try {
+      const updated = await updateProject(selectedProject.id, data);
+      // Update selectedProject in-place so UI reflects changes immediately
+      setSelectedProject((prev) => ({ ...prev, ...updated }));
+      // Also update the project in the sidebar list
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === selectedProject.id ? { ...p, name: updated.name } : p,
+        ),
+      );
+      showStatus("Projektinfo sparad");
+    } catch {
+      showStatus("Kunde inte spara projektinfo");
+    }
+  }
+
   function handleKalkylChange(variant, field, value) {
     setKalkylData((prev) => ({
       ...prev,
@@ -632,9 +652,11 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <span className="topbar-logo">
-            KALKYL<span>PAL</span>
-          </span>
+          <a href="/app" style={{ textDecoration: "none" }}>
+            <span className="topbar-logo">
+              KALKYL<span>PAL</span>
+            </span>
+          </a>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
           {batchState?.results && (
@@ -717,29 +739,36 @@ export default function App() {
 
         {step === "scan" ? (
           <>
-            <DrawingViewer
-              drawingId={selectedDrawing?.id}
-              pageNumber={pageNumber}
-              pageCount={pageCount}
-              pageDimensions={pageDimensions}
-              components={allComponents}
-              warnings={scanResult?.warnings || []}
-              manualItems={manualItems}
-              highlightCode={highlightCode}
-              onPageChange={setPageNumber}
-              onPrevDrawing={handlePrevDrawing}
-              onNextDrawing={handleNextDrawing}
-              hasPrevDrawing={(() => {
-                const d = selectedProject?.drawings || [];
-                const i = d.findIndex((x) => x.id === selectedDrawing?.id);
-                return i > 0;
-              })()}
-              hasNextDrawing={(() => {
-                const d = selectedProject?.drawings || [];
-                const i = d.findIndex((x) => x.id === selectedDrawing?.id);
-                return i >= 0 && i < d.length - 1;
-              })()}
-            />
+            {!selectedDrawing && selectedProject ? (
+              <ProjectInfoPanel
+                project={selectedProject}
+                onSave={handleUpdateProject}
+              />
+            ) : (
+              <DrawingViewer
+                drawingId={selectedDrawing?.id}
+                pageNumber={pageNumber}
+                pageCount={pageCount}
+                pageDimensions={pageDimensions}
+                components={allComponents}
+                warnings={scanResult?.warnings || []}
+                manualItems={manualItems}
+                highlightCode={highlightCode}
+                onPageChange={setPageNumber}
+                onPrevDrawing={handlePrevDrawing}
+                onNextDrawing={handleNextDrawing}
+                hasPrevDrawing={(() => {
+                  const d = selectedProject?.drawings || [];
+                  const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+                  return i > 0;
+                })()}
+                hasNextDrawing={(() => {
+                  const d = selectedProject?.drawings || [];
+                  const i = d.findIndex((x) => x.id === selectedDrawing?.id);
+                  return i >= 0 && i < d.length - 1;
+                })()}
+              />
+            )}
 
             <ComponentPanel
               drawingId={selectedDrawing?.id}

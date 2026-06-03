@@ -313,7 +313,7 @@ export default function Sidebar({
                 className="btn btn-ghost btn-full"
                 onClick={() => fileInputRef.current?.click()}
               >
-                + Ladda upp .pdf
+                Ladda upp .pdf
               </button>
             </div>
           </>

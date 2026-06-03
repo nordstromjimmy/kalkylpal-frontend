@@ -7,7 +7,7 @@
  *  - Components stay clean — they call functions, not raw fetch()
  */
 
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE = "http://localhost:8000";
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
@@ -180,5 +180,15 @@ export async function clearProjectData(projectId) {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to clear project data");
+  return res.json();
+}
+
+export async function updateProject(projectId, data) {
+  const res = await fetch(`${BASE}/projects/${projectId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update project");
   return res.json();
 }
