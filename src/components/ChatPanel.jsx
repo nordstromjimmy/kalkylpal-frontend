@@ -144,7 +144,7 @@ export default function ChatPanel({ projectId, projectName }) {
             ))}
             {loading && (
               <div style={{ ...styles.message, alignSelf: "flex-start" }}>
-                <div style={styles.assistantLabel}>VVS AI</div>
+                <div style={styles.assistantLabel}>KalkylPal AI</div>
                 <div
                   style={{
                     ...styles.bubble,
