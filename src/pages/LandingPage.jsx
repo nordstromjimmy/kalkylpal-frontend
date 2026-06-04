@@ -65,23 +65,20 @@ export default function LandingPage() {
 
         {/* Description */}
         <p style={styles.description}>
-          Skanna ritningar automatiskt.
+          Skanna ritningar.
           <br />
           Hitta komponenter. Exportera resultat.
         </p>
 
         {/* Feature chips */}
         <div style={styles.chips}>
-          {[
-            "PDF-skanning",
-            "Projektöversikt",
-            "Excel & PDF-export",
-            "Markerade ritningar",
-          ].map((f) => (
-            <span key={f} style={styles.chip}>
-              {f}
-            </span>
-          ))}
+          {["PDF-skanning", "Projektöversikt", "Excel & PDF-export"].map(
+            (f) => (
+              <span key={f} style={styles.chip}>
+                {f}
+              </span>
+            ),
+          )}
         </div>
 
         {/* CTA */}
