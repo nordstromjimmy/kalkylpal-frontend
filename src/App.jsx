@@ -652,9 +652,11 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <span className="topbar-logo">
-            KALKYL<span>PAL</span>
-          </span>
+          <a href="/app" style={{ textDecoration: "none" }}>
+            <span className="topbar-logo">
+              KALKYL<span>PAL</span>
+            </span>
+          </a>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
           {batchState?.results && (
