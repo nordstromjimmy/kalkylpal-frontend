@@ -192,3 +192,29 @@ export async function updateProject(projectId, data) {
   if (!res.ok) throw new Error("Failed to update project");
   return res.json();
 }
+
+// ── AI Chat ───────────────────────────────────────────────────────────────────
+
+export async function getChatHistory(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/chat`);
+  if (!res.ok) throw new Error("Failed to load chat history");
+  return res.json();
+}
+
+export async function sendChatMessage(projectId, message) {
+  const res = await fetch(`${BASE}/projects/${projectId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) throw new Error("Failed to send message");
+  return res.json();
+}
+
+export async function clearChatHistory(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/chat`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to clear chat");
+  return res.json();
+}

@@ -35,6 +35,7 @@ export default function DrawingViewer({
   onNextDrawing = null,
   hasPrevDrawing = false,
   hasNextDrawing = false,
+  onOpenChat = null,
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hoveredBox, setHoveredBox] = useState(null);
@@ -191,7 +192,7 @@ export default function DrawingViewer({
       <div className="viewer">
         <div className="viewer-empty">
           <div className="viewer-empty-icon">📐</div>
-          <div>Välj ett projekt och ritning för att börja</div>
+          <div>Välj ett projekt för att börja</div>
         </div>
       </div>
     );
@@ -304,6 +305,16 @@ export default function DrawingViewer({
             "Ladda ner ritning"
           )}
         </button>
+        {onOpenChat && (
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 11 }}
+            onClick={onOpenChat}
+            title="Öppna AI-assistent"
+          >
+            💬 AI-assistent
+          </button>
+        )}
       </div>
 
       {/* Loading spinner — centered in the viewer area, outside the drawing wrap */}

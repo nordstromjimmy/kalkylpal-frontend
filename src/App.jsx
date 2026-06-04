@@ -652,11 +652,9 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <a href="/app" style={{ textDecoration: "none" }}>
-            <span className="topbar-logo">
-              KALKYL<span>PAL</span>
-            </span>
-          </a>
+          <span className="topbar-logo">
+            KALKYL<span>PAL</span>
+          </span>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
           {batchState?.results && (
@@ -740,10 +738,19 @@ export default function App() {
         {step === "scan" ? (
           <>
             {!selectedDrawing && selectedProject ? (
-              <ProjectInfoPanel
-                project={selectedProject}
-                onSave={handleUpdateProject}
-              />
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  background: "var(--bg-0)",
+                }}
+              >
+                <ProjectInfoPanel
+                  project={selectedProject}
+                  onSave={handleUpdateProject}
+                />
+              </div>
             ) : (
               <DrawingViewer
                 drawingId={selectedDrawing?.id}
@@ -757,6 +764,7 @@ export default function App() {
                 onPageChange={setPageNumber}
                 onPrevDrawing={handlePrevDrawing}
                 onNextDrawing={handleNextDrawing}
+                onOpenChat={() => setSelectedDrawing(null)}
                 hasPrevDrawing={(() => {
                   const d = selectedProject?.drawings || [];
                   const i = d.findIndex((x) => x.id === selectedDrawing?.id);

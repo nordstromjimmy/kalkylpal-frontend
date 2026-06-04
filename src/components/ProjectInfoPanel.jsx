@@ -4,6 +4,7 @@
  * toggle for inline editing.
  */
 import { useState, useEffect } from "react";
+import ChatPanel from "./ChatPanel";
 
 const FIELDS = [
   { key: "name", label: "Projektnamn", required: true },
@@ -171,27 +172,34 @@ export default function ProjectInfoPanel({ project, onSave }) {
           })}
         </div>
       </div>
+
+      <ChatPanel projectId={project.id} projectName={project.name} />
     </div>
   );
 }
 
 const styles = {
   root: {
-    flex: 1,
+    height: "100%",
+    minHeight: 0,
     display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "center",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 24,
     padding: "40px 32px",
     overflowY: "auto",
     background: "var(--bg-0)",
+    boxSizing: "border-box",
   },
   card: {
     width: "100%",
-    maxWidth: 680,
+    maxWidth: 1024,
+    flexShrink: 0,
+    maxHeight: 420,
+    overflowY: "auto",
     background: "var(--bg-1)",
     border: "1px solid var(--border)",
     borderRadius: "var(--radius)",
-    overflow: "hidden",
   },
   header: {
     display: "flex",
