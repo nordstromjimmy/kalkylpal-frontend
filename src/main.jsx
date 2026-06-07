@@ -5,10 +5,10 @@ import "./index.css";
 import LandingPage from "./pages/LandingPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import App from "./App.jsx";
+import { getToken } from "./api.js";
 
 function RequireAuth({ children }) {
-  const authed = sessionStorage.getItem("kalkylpal_auth") === "1";
-  return authed ? children : <Navigate to="/login" replace />;
+  return getToken() ? children : <Navigate to="/login" replace />;
 }
 
 createRoot(document.getElementById("root")).render(

@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
-
-const VALID_USERNAME = import.meta.env.VITE_APP_USERNAME;
-const VALID_PASSWORD = import.meta.env.VITE_APP_PASSWORD;
+import { login } from "../api";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -12,21 +10,18 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setLoading(true);
-
-    // Small artificial delay so it doesn't feel instant
-    setTimeout(() => {
-      if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-        sessionStorage.setItem("kalkylpal_auth", "1");
-        navigate("/app");
-      } else {
-        setError("Fel användarnamn eller lösenord");
-        setLoading(false);
-      }
-    }, 400);
+    try {
+      await login(username, password);
+      navigate("/app");
+    } catch (err) {
+      setError(err.message || "Fel användarnamn eller lösenord");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -87,7 +82,7 @@ export default function LoginPage() {
               e.currentTarget.style.background = "transparent";
             }}
           >
-            {loading ? "Loggar in…" : "Logga in"}
+            {loading ? "Loggar in…" : "Logga in →"}
           </button>
         </form>
 
@@ -101,7 +96,7 @@ export default function LoginPage() {
             (e.currentTarget.style.color = "rgba(255,255,255,0.2)")
           }
         >
-          Tillbaka
+          ← Tillbaka
         </button>
       </div>
     </div>

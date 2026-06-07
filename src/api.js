@@ -1,24 +1,66 @@
 /**
  * api.js — All communication with the FastAPI backend.
- *
- * Keeping all fetch() calls in one file means:
- *  - If the backend URL changes, we change it in one place
- *  - Easy to see every API call the app makes
- *  - Components stay clean — they call functions, not raw fetch()
  */
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// ── Projects ─────────────────────────────────────────────────────────────────
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+export function getToken() {
+  return localStorage.getItem("kalkylpal_token");
+}
+
+export function setToken(token) {
+  localStorage.setItem("kalkylpal_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("kalkylpal_token");
+}
+
+/**
+ * Wraps fetch with Authorization header and handles 401 → redirect to login.
+ */
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+  const headers = { ...options.headers };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    clearToken();
+    window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+  return res;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function login(username, password) {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Login failed");
+  }
+  const data = await res.json();
+  setToken(data.access_token);
+  return data;
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
 
 export async function getProjects() {
-  const res = await fetch(`${BASE}/projects/`);
+  const res = await apiFetch(`${BASE}/projects/`);
   if (!res.ok) throw new Error("Failed to load projects");
   return res.json();
 }
 
 export async function createProject(name, description = "") {
-  const res = await fetch(`${BASE}/projects/`, {
+  const res = await apiFetch(`${BASE}/projects/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, description }),
@@ -28,14 +70,24 @@ export async function createProject(name, description = "") {
 }
 
 export async function getProject(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}`);
+  const res = await apiFetch(`${BASE}/projects/${projectId}`);
   if (!res.ok) throw new Error("Failed to load project");
   return res.json();
 }
 
 export async function getProjectSummary(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}/summary`);
+  const res = await apiFetch(`${BASE}/projects/${projectId}/summary`);
   if (!res.ok) throw new Error("Failed to load summary");
+  return res.json();
+}
+
+export async function updateProject(projectId, data) {
+  const res = await apiFetch(`${BASE}/projects/${projectId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update project");
   return res.json();
 }
 
@@ -44,10 +96,13 @@ export async function getProjectSummary(projectId) {
 export async function uploadDrawing(projectId, file) {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${BASE}/drawings/upload?project_id=${projectId}`, {
-    method: "POST",
-    body: form,
-  });
+  const res = await apiFetch(
+    `${BASE}/drawings/upload?project_id=${projectId}`,
+    {
+      method: "POST",
+      body: form,
+    },
+  );
   if (!res.ok) throw new Error("Failed to upload drawing");
   return res.json();
 }
@@ -56,7 +111,7 @@ export async function scanDrawing(drawingId, searchCode = "") {
   const params = searchCode
     ? `?search_code=${encodeURIComponent(searchCode)}`
     : "";
-  const res = await fetch(`${BASE}/drawings/${drawingId}/scan${params}`, {
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}/scan${params}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to scan drawing");
@@ -65,29 +120,30 @@ export async function scanDrawing(drawingId, searchCode = "") {
 
 export async function getComponents(drawingId, baseCode = "") {
   const params = baseCode ? `?base_code=${encodeURIComponent(baseCode)}` : "";
-  const res = await fetch(`${BASE}/drawings/${drawingId}/components${params}`);
+  const res = await apiFetch(
+    `${BASE}/drawings/${drawingId}/components${params}`,
+  );
   if (!res.ok) throw new Error("Failed to load components");
   return res.json();
 }
 
 /**
- * Returns the URL string for the page image.
- * We return a URL rather than fetching bytes because we set it as <img src>.
+ * Image URL — uses the public endpoint since <img src> can't send auth headers.
  */
 export function getPageImageUrl(drawingId, pageNumber, dpi = 150) {
-  return `${BASE}/drawings/${drawingId}/page/${pageNumber}/image?dpi=${dpi}`;
+  return `${BASE}/public/drawings/${drawingId}/page/${pageNumber}/image?dpi=${dpi}`;
 }
 
 export async function getPageInfo(drawingId, pageNumber) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/drawings/${drawingId}/page/${pageNumber}/info`,
   );
   if (!res.ok) throw new Error("Failed to load page info");
-  return res.json(); // { width, height, page_number }
+  return res.json();
 }
 
 export async function deleteDrawing(drawingId) {
-  const res = await fetch(`${BASE}/drawings/${drawingId}`, {
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete drawing");
@@ -95,7 +151,7 @@ export async function deleteDrawing(drawingId) {
 }
 
 export async function deleteProject(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
+  const res = await apiFetch(`${BASE}/projects/${projectId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Kunde inte ta bort projekt");
@@ -104,19 +160,15 @@ export async function deleteProject(projectId) {
 
 // ── Persisted scan results & manual items ─────────────────────────────────────
 
-/**
- * Loads the last scan result from stored ComponentInstances.
- * Returns null if no scan has been run for this drawing.
- */
 export async function getScanResult(drawingId) {
-  const res = await fetch(`${BASE}/drawings/${drawingId}/scan-result`);
-  if (res.status === 204) return null; // no scan stored
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}/scan-result`);
+  if (res.status === 204) return null;
   if (!res.ok) throw new Error("Failed to load scan result");
   return res.json();
 }
 
 export async function addManualItem(drawingId, item) {
-  const res = await fetch(`${BASE}/drawings/${drawingId}/manual-items`, {
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}/manual-items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -130,28 +182,26 @@ export async function addManualItem(drawingId, item) {
     }),
   });
   if (!res.ok) throw new Error("Failed to save manual item");
-  return res.json(); // returns { id, code, ... } — id needed for future deletion
+  return res.json();
 }
 
 export async function getManualItems(drawingId) {
-  const res = await fetch(`${BASE}/drawings/${drawingId}/manual-items`);
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}/manual-items`);
   if (!res.ok) throw new Error("Failed to load manual items");
   return res.json();
 }
 
 export async function deleteManualItem(drawingId, itemId) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/drawings/${drawingId}/manual-items/${itemId}`,
-    {
-      method: "DELETE",
-    },
+    { method: "DELETE" },
   );
   if (!res.ok) throw new Error("Failed to delete manual item");
   return res.json();
 }
 
 export async function clearDrawingData(drawingId) {
-  const res = await fetch(`${BASE}/drawings/${drawingId}/clear-data`, {
+  const res = await apiFetch(`${BASE}/drawings/${drawingId}/clear-data`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to clear drawing data");
@@ -159,7 +209,7 @@ export async function clearDrawingData(drawingId) {
 }
 
 export async function saveBatchResult(projectId, batchState) {
-  const res = await fetch(`${BASE}/projects/${projectId}/batch-result`, {
+  const res = await apiFetch(`${BASE}/projects/${projectId}/batch-result`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(batchState),
@@ -169,40 +219,30 @@ export async function saveBatchResult(projectId, batchState) {
 }
 
 export async function getBatchResult(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}/batch-result`);
+  const res = await apiFetch(`${BASE}/projects/${projectId}/batch-result`);
   if (res.status === 204) return null;
   if (!res.ok) throw new Error("Failed to load batch result");
   return res.json();
 }
 
 export async function clearProjectData(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}/clear-data`, {
+  const res = await apiFetch(`${BASE}/projects/${projectId}/clear-data`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to clear project data");
   return res.json();
 }
 
-export async function updateProject(projectId, data) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to update project");
-  return res.json();
-}
-
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 
 export async function getChatHistory(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}/chat`);
+  const res = await apiFetch(`${BASE}/projects/${projectId}/chat`);
   if (!res.ok) throw new Error("Failed to load chat history");
   return res.json();
 }
 
 export async function sendChatMessage(projectId, message) {
-  const res = await fetch(`${BASE}/projects/${projectId}/chat`, {
+  const res = await apiFetch(`${BASE}/projects/${projectId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
@@ -212,7 +252,7 @@ export async function sendChatMessage(projectId, message) {
 }
 
 export async function clearChatHistory(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}/chat`, {
+  const res = await apiFetch(`${BASE}/projects/${projectId}/chat`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to clear chat");
@@ -220,7 +260,7 @@ export async function clearChatHistory(projectId) {
 }
 
 export async function getAnnotatedPdf(drawingId, pageNumber, boxes) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/drawings/${drawingId}/page/${pageNumber}/annotated-pdf`,
     {
       method: "POST",
