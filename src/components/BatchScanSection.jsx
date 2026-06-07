@@ -10,7 +10,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getPageImageUrl } from "../api";
+import { getAnnotatedPdf } from "../api";
 
 export default function BatchScanSection({
   projectName = "Projekt",
@@ -26,7 +26,6 @@ export default function BatchScanSection({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
 
-  // ── Bulk drawing download ─────────────────────────────────────────────────
   async function downloadAllDrawings() {
     if (!batchState?.results) return;
     setIsDownloading(true);
@@ -42,52 +41,24 @@ export default function BatchScanSection({
         filename: row.filename,
       });
 
-      if (!row.components?.length || !row.pageDimensions) continue;
+      if (!row.components?.length) continue;
 
       try {
-        // Fetch the page image at 200 DPI for a sharp download
-        const resp = await fetch(
-          getPageImageUrl(parseInt(drawingIdStr), 1, 200),
-        );
-        const blob = await resp.blob();
-        const bitmap = await createImageBitmap(blob);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(bitmap, 0, 0);
-
-        // Scale PDF point coordinates → canvas pixel coordinates
-        const scaleX = bitmap.width / row.pageDimensions.width;
-        const scaleY = bitmap.height / row.pageDimensions.height;
-
-        // Draw highlight boxes for every detected component
-        row.components.forEach((c) => {
-          const x = c.x0 * scaleX;
-          const y = c.y0 * scaleY;
-          const w = (c.x1 - c.x0) * scaleX;
-          const h = (c.y1 - c.y0) * scaleY;
-          ctx.fillStyle = "rgba(245,166,35,0.18)";
-          ctx.strokeStyle = "rgba(245,166,35,1)";
-          ctx.lineWidth = 2;
-          ctx.fillRect(x, y, w, h);
-          ctx.strokeRect(x, y, w, h);
-        });
-
-        // Convert canvas to PNG blob and add to zip
-        const pngBlob = await new Promise((resolve) =>
-          canvas.toBlob(resolve, "image/png"),
-        );
+        const boxes = row.components.map((c) => ({
+          x0: c.x0,
+          y0: c.y0,
+          x1: c.x1,
+          y1: c.y1,
+        }));
+        const pdfBlob = await getAnnotatedPdf(parseInt(drawingIdStr), 1, boxes);
         const zipFilename =
-          row.filename.replace(/\.pdf$/i, "") + "_markerad.png";
-        zip.file(zipFilename, pngBlob);
+          row.filename.replace(/\.pdf$/i, "") + "_markerad.pdf";
+        zip.file(zipFilename, pdfBlob);
       } catch (err) {
         console.error(`Kunde inte rendera ${row.filename}:`, err);
       }
     }
 
-    // Generate and download the zip
     const zipBlob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(zipBlob);
     const a = document.createElement("a");

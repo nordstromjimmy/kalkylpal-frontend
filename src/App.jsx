@@ -77,6 +77,7 @@ export default function App() {
     try {
       const saved = await getBatchResult(project.id);
       setBatchState(saved || null);
+      setKalkylData(saved?.kalkylData || {});
     } catch {
       setBatchState(null);
     }
@@ -178,10 +179,38 @@ export default function App() {
           getManualItems(drawing.id),
         ]);
         if (savedResult) {
-          // Use String() to ensure key matches regardless of number vs string type
           const batchWarnings =
             batchState?.results?.[String(drawing.id)]?.warnings || [];
-          setScanResult({ ...savedResult, warnings: batchWarnings });
+          // Filter out instances the user has previously removed
+          const removedForDrawing = [
+            ...(batchState?.removedInstances?.[drawing.id] || []),
+            ...(batchState?.removedInstances?.[String(drawing.id)] || []),
+          ];
+          let filteredComponents = { ...savedResult.components };
+          if (removedForDrawing.length > 0) {
+            for (const [base, instances] of Object.entries(
+              filteredComponents,
+            )) {
+              filteredComponents[base] = instances.filter(
+                (inst) =>
+                  !removedForDrawing.some(
+                    (r) => r.x0 === inst.x0 && r.y0 === inst.y0,
+                  ),
+              );
+              if (filteredComponents[base].length === 0)
+                delete filteredComponents[base];
+            }
+          }
+          const filteredTotal = Object.values(filteredComponents).reduce(
+            (s, a) => s + a.length,
+            0,
+          );
+          setScanResult({
+            ...savedResult,
+            components: filteredComponents,
+            total_found: filteredTotal,
+            warnings: batchWarnings,
+          });
           const pages = Object.values(savedResult.components)
             .flat()
             .map((c) => c.page);
@@ -516,6 +545,53 @@ export default function App() {
     const merged = mergeBatchState(preScanBatchState, newScan);
     setBatchState(merged);
 
+    // If the currently selected drawing was part of this scan, refresh its
+    // scanResult so highlight boxes appear immediately without requiring a re-click
+    if (selectedDrawing && drawingIds.includes(selectedDrawing.id)) {
+      try {
+        const refreshed = await getScanResult(selectedDrawing.id);
+        if (refreshed) {
+          const batchWarnings =
+            merged.results?.[String(selectedDrawing.id)]?.warnings || [];
+          const removedForDrawing = [
+            ...(merged.removedInstances?.[selectedDrawing.id] || []),
+            ...(merged.removedInstances?.[String(selectedDrawing.id)] || []),
+          ];
+          let filteredComponents = { ...refreshed.components };
+          if (removedForDrawing.length > 0) {
+            for (const [base, instances] of Object.entries(
+              filteredComponents,
+            )) {
+              filteredComponents[base] = instances.filter(
+                (inst) =>
+                  !removedForDrawing.some(
+                    (r) => r.x0 === inst.x0 && r.y0 === inst.y0,
+                  ),
+              );
+              if (filteredComponents[base].length === 0)
+                delete filteredComponents[base];
+            }
+          }
+          const filteredTotal = Object.values(filteredComponents).reduce(
+            (s, a) => s + a.length,
+            0,
+          );
+          setScanResult({
+            ...refreshed,
+            components: filteredComponents,
+            total_found: filteredTotal,
+            warnings: batchWarnings,
+          });
+          const pages = Object.values(filteredComponents)
+            .flat()
+            .map((c) => c.page);
+          if (pages.length > 0) setPageCount(Math.max(...pages));
+        }
+      } catch {
+        /* non-critical — user can click drawing to refresh manually */
+      }
+    }
+
     // Persist to DB so results survive page refresh
     if (selectedProject) {
       try {
@@ -633,10 +709,91 @@ export default function App() {
   }
 
   function handleKalkylChange(variant, field, value) {
-    setKalkylData((prev) => ({
-      ...prev,
-      [variant]: { ...(prev[variant] || {}), [field]: value },
-    }));
+    const updated = {
+      ...kalkylData,
+      [variant]: { ...(kalkylData[variant] || {}), [field]: value },
+    };
+    setKalkylData(updated);
+    if (selectedProject && batchState) {
+      saveBatchResult(selectedProject.id, {
+        ...batchState,
+        kalkylData: updated,
+      }).catch(() => {});
+    }
+  }
+
+  function handleRemoveComponent(component) {
+    const drawingId = selectedDrawing?.id;
+    if (!drawingId) return;
+
+    // Remove from scanResult immediately
+    setScanResult((prev) => {
+      if (!prev) return prev;
+      const newComponents = { ...prev.components };
+      if (newComponents[component.base_code]) {
+        newComponents[component.base_code] = newComponents[
+          component.base_code
+        ].filter((c) => !(c.x0 === component.x0 && c.y0 === component.y0));
+        if (newComponents[component.base_code].length === 0)
+          delete newComponents[component.base_code];
+      }
+      return {
+        ...prev,
+        total_found: prev.total_found - 1,
+        components: newComponents,
+      };
+    });
+
+    // Remove from batchState + persist
+    setBatchState((prev) => {
+      if (!prev?.results) return prev;
+      const row = prev.results[drawingId];
+      if (!row) return prev;
+
+      // Decrement breakdown count for this variant
+      const newBreakdown = { ...row.breakdown };
+      if (newBreakdown[component.base_code]) {
+        newBreakdown[component.base_code] = {
+          ...newBreakdown[component.base_code],
+        };
+        newBreakdown[component.base_code][component.code] =
+          (newBreakdown[component.base_code][component.code] || 1) - 1;
+        if (newBreakdown[component.base_code][component.code] <= 0)
+          delete newBreakdown[component.base_code][component.code];
+        if (Object.keys(newBreakdown[component.base_code]).length === 0)
+          delete newBreakdown[component.base_code];
+      }
+
+      // Remove from components array by position
+      const newComponents = (row.components || []).filter(
+        (c) => !(c.x0 === component.x0 && c.y0 === component.y0),
+      );
+
+      // Store removed position so it stays removed after refresh
+      const existingRemoved = prev.removedInstances || {};
+      const drawingRemoved = existingRemoved[drawingId] || [];
+      const newRemoved = [
+        ...drawingRemoved,
+        { x0: component.x0, y0: component.y0 },
+      ];
+
+      const updated = {
+        ...prev,
+        removedInstances: { ...existingRemoved, [drawingId]: newRemoved },
+        results: {
+          ...prev.results,
+          [drawingId]: {
+            ...row,
+            breakdown: newBreakdown,
+            components: newComponents,
+            total: row.total - 1,
+          },
+        },
+      };
+      if (selectedProject)
+        saveBatchResult(selectedProject.id, updated).catch(() => {});
+      return updated;
+    });
   }
 
   function showStatus(msg) {
@@ -767,6 +924,7 @@ export default function App() {
                 onPrevDrawing={handlePrevDrawing}
                 onNextDrawing={handleNextDrawing}
                 onOpenChat={() => setSelectedDrawing(null)}
+                onRemoveComponent={handleRemoveComponent}
                 hasPrevDrawing={(() => {
                   const d = selectedProject?.drawings || [];
                   const i = d.findIndex((x) => x.id === selectedDrawing?.id);

@@ -14,7 +14,7 @@
  *   The zoom/DPI factor cancels out — only page dimensions matter.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getPageImageUrl } from "../api";
+import { getPageImageUrl, getAnnotatedPdf } from "../api";
 
 const BOX_PADDING_PCT = 0.05;
 const MIN_ZOOM = 0.5;
@@ -36,9 +36,11 @@ export default function DrawingViewer({
   hasPrevDrawing = false,
   hasNextDrawing = false,
   onOpenChat = null,
+  onRemoveComponent = null,
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hoveredBox, setHoveredBox] = useState(null);
+  const [selectedBox, setSelectedBox] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // ── Zoom & pan state ──────────────────────────────────────────────────────
@@ -55,6 +57,7 @@ export default function DrawingViewer({
     setImageLoaded(false);
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    setSelectedBox(null);
   }, [drawingId, pageNumber]);
 
   // ── Scroll → zoom centered on mouse position ──────────────────────────────
@@ -120,60 +123,25 @@ export default function DrawingViewer({
     e.currentTarget.style.cursor = "grab";
   }
 
-  // ── Download page as PNG with highlight boxes painted on ─────────────────────
   async function handleDownload() {
-    if (!pageDimensions) return;
+    if (!drawingId) return;
     setIsDownloading(true);
     try {
-      // Fetch a fresh high-DPI copy of the page (200 DPI gives sharp downloads)
-      const url = getPageImageUrl(drawingId, pageNumber, 200);
-      const resp = await fetch(url);
-      const blob = await resp.blob();
-      const bitmap = await createImageBitmap(blob);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(bitmap, 0, 0);
-
-      // Scale factor: PDF points → canvas pixels
-      const scaleX = bitmap.width / pageDimensions.width;
-      const scaleY = bitmap.height / pageDimensions.height;
-
-      // Draw all component highlight boxes on top
-      visibleComponents.forEach((c) => {
-        const isActive =
-          highlightCode !== "__none__" &&
-          (!highlightCode ||
-            c.base_code === highlightCode ||
-            c.code === highlightCode);
-        const x = c.x0 * scaleX;
-        const y = c.y0 * scaleY;
-        const w = (c.x1 - c.x0) * scaleX;
-        const h = (c.y1 - c.y0) * scaleY;
-        ctx.fillStyle = isActive
-          ? "rgba(245,166,35,0.18)"
-          : "rgba(245,166,35,0.04)";
-        ctx.strokeStyle = isActive
-          ? "rgba(245,166,35,1)"
-          : "rgba(245,166,35,0.3)";
-        ctx.lineWidth = 2;
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeRect(x, y, w, h);
-      });
-
-      // Trigger browser download
-      canvas.toBlob((dlBlob) => {
-        const dlUrl = URL.createObjectURL(dlBlob);
-        const a = document.createElement("a");
-        a.href = dlUrl;
-        a.download = `ritning_sida_${pageNumber}_markerad.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-      }, "image/png");
+      const boxes = visibleComponents.map((c) => ({
+        x0: c.x0,
+        y0: c.y0,
+        x1: c.x1,
+        y1: c.y1,
+      }));
+      const blob = await getAnnotatedPdf(drawingId, pageNumber, boxes);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ritning_sida_${pageNumber}_markerad.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Nedladdning misslyckades:", err);
     } finally {
@@ -350,6 +318,7 @@ export default function DrawingViewer({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
         onDoubleClick={handleDoubleClick}
+        onClick={() => setSelectedBox(null)}
       >
         {/* Transformed layer — zoom + pan applied here */}
         <div
@@ -378,6 +347,7 @@ export default function DrawingViewer({
                     (!highlightCode ||
                       c.base_code === highlightCode ||
                       c.code === highlightCode);
+                  const isSelected = selectedBox === `det-${i}`;
                   return (
                     <div
                       key={`det-${i}`}
@@ -385,16 +355,59 @@ export default function DrawingViewer({
                       style={{
                         ...toStyle(c.x0, c.y0, c.x1, c.y1),
                         opacity: isActive ? 1 : 0.15,
+                        outline: isSelected
+                          ? "2px solid var(--red)"
+                          : undefined,
+                        cursor: "pointer",
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedBox(isSelected ? null : `det-${i}`);
                       }}
                       onMouseEnter={() => setHoveredBox({ index: `det-${i}` })}
                       onMouseLeave={() => setHoveredBox(null)}
                     >
-                      {hoveredBox?.index === `det-${i}` && (
-                        <div className="highlight-tooltip">
-                          {c.raw_text !== c.code
-                            ? `${c.raw_text} → ${c.code}`
-                            : c.code}
-                        </div>
+                      {isSelected && onRemoveComponent ? (
+                        <button
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            background: "var(--red)",
+                            border: "none",
+                            borderRadius: "50%",
+                            width: 18,
+                            height: 18,
+                            color: "#fff",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            lineHeight: 1,
+                            zIndex: 10,
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveComponent(c);
+                            setSelectedBox(null);
+                          }}
+                        >
+                          ×
+                        </button>
+                      ) : (
+                        hoveredBox?.index === `det-${i}` &&
+                        !isSelected && (
+                          <div className="highlight-tooltip">
+                            {c.raw_text !== c.code
+                              ? `${c.raw_text} → ${c.code}`
+                              : c.code}
+                          </div>
+                        )
                       )}
                     </div>
                   );

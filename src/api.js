@@ -7,7 +7,7 @@
  *  - Components stay clean — they call functions, not raw fetch()
  */
 
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE = "http://localhost:8000";
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
@@ -217,4 +217,17 @@ export async function clearChatHistory(projectId) {
   });
   if (!res.ok) throw new Error("Failed to clear chat");
   return res.json();
+}
+
+export async function getAnnotatedPdf(drawingId, pageNumber, boxes) {
+  const res = await fetch(
+    `${BASE}/drawings/${drawingId}/page/${pageNumber}/annotated-pdf`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boxes }),
+    },
+  );
+  if (!res.ok) throw new Error("Failed to get annotated PDF");
+  return res.blob();
 }
