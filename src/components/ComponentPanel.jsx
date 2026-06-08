@@ -44,6 +44,7 @@ export default function ComponentPanel({
   onResetAll,
   onResetProject,
   onDismissWarning,
+  onRemoveManualItem,
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [isScanOpen, setIsScanOpen] = useState(true);
@@ -346,12 +347,12 @@ export default function ComponentPanel({
           <div
             style={{
               padding: 16,
-              color: "var(--text-dim)",
+              color: "var(--amber)",
               fontSize: 11,
               fontFamily: "var(--font-mono)",
             }}
           >
-            INFO: Välj eller skapa ett projekt
+            Välj ett projekt för att börja
           </div>
         )}
 
@@ -383,12 +384,33 @@ export default function ComponentPanel({
               <div
                 key={i}
                 className="comp-variant"
-                style={{ color: "var(--green)" }}
+                style={{
+                  color: "var(--green)",
+                  justifyContent: "space-between",
+                }}
               >
                 <span>+ {m.code}</span>
-                <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-                  s.{m.page}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                    s.{m.page}
+                  </span>
+                  {onRemoveManualItem && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        fontSize: 10,
+                        padding: "1px 6px",
+                        color: "var(--red)",
+                        borderColor: "var(--red)",
+                        lineHeight: 1,
+                      }}
+                      onClick={() => onRemoveManualItem(m)}
+                      title="Ta bort"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </>
@@ -620,7 +642,7 @@ export default function ComponentPanel({
             onClick={() => setShowManualForm(true)}
             disabled={!drawingId}
           >
-            Lägg till komponent manuellt
+            + Lägg till komponent manuellt
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -629,7 +651,7 @@ export default function ComponentPanel({
             </div>
             <input
               className="input"
-              placeholder="t.ex. TD201-160"
+              placeholder="Kod, t.ex. TD201-160"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}

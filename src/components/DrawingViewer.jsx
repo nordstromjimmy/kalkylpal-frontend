@@ -37,10 +37,16 @@ export default function DrawingViewer({
   hasNextDrawing = false,
   onOpenChat = null,
   onRemoveComponent = null,
+  onRemoveComponents = null,
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hoveredBox, setHoveredBox] = useState(null);
   const [selectedBox, setSelectedBox] = useState(null);
+  const [selectedComponents, setSelectedComponents] = useState([]);
+  const selectionStartRef = useRef(null); // { x, y } client coords — ref avoids stale closures
+  const selectionCurrentRef = useRef(null);
+  const [selectionTick, setSelectionTick] = useState(0); // incremented on mousemove to force re-render
+  const isSelecting = useRef(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // ── Zoom & pan state ──────────────────────────────────────────────────────
@@ -58,6 +64,10 @@ export default function DrawingViewer({
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setSelectedBox(null);
+    setSelectedComponents([]);
+    selectionStartRef.current = null;
+    selectionCurrentRef.current = null;
+    isSelecting.current = false;
   }, [drawingId, pageNumber]);
 
   // ── Scroll → zoom centered on mouse position ──────────────────────────────
@@ -97,9 +107,37 @@ export default function DrawingViewer({
     return () => container.removeEventListener("wheel", handleWheel);
   }, [handleWheel]);
 
-  // ── Mouse down → start panning ────────────────────────────────────────────
+  // ── Screen → PDF coordinate conversion ───────────────────────────────────
+  function screenToPDF(clientX, clientY) {
+    if (!wrapRef.current || !pageDimensions) return { x: 0, y: 0 };
+    const rect = wrapRef.current.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * pageDimensions.width,
+      y: ((clientY - rect.top) / rect.height) * pageDimensions.height,
+    };
+  }
+
+  function overlaps(comp, sel) {
+    return !(
+      comp.x1 < sel.x0 ||
+      comp.x0 > sel.x1 ||
+      comp.y1 < sel.y0 ||
+      comp.y0 > sel.y1
+    );
+  }
+
+  // ── Mouse down → start panning or selection ───────────────────────────────
   function handleMouseDown(e) {
     if (e.button !== 0) return;
+    if (e.shiftKey) {
+      e.preventDefault();
+      isSelecting.current = true;
+      selectionStartRef.current = { x: e.clientX, y: e.clientY };
+      selectionCurrentRef.current = { x: e.clientX, y: e.clientY };
+      setSelectedComponents([]);
+      setSelectionTick(0);
+      return;
+    }
     isPanning.current = true;
     panStart.current = { x: e.clientX, y: e.clientY };
     panOrigin.current = { ...pan };
@@ -107,6 +145,11 @@ export default function DrawingViewer({
   }
 
   function handleMouseMove(e) {
+    if (isSelecting.current) {
+      selectionCurrentRef.current = { x: e.clientX, y: e.clientY };
+      setSelectionTick((t) => t + 1);
+      return;
+    }
     if (!isPanning.current) return;
     const dx = e.clientX - panStart.current.x;
     const dy = e.clientY - panStart.current.y;
@@ -114,11 +157,41 @@ export default function DrawingViewer({
   }
 
   function handleMouseUp(e) {
+    if (isSelecting.current) {
+      isSelecting.current = false;
+      const start = selectionStartRef.current;
+      const current = selectionCurrentRef.current;
+      selectionStartRef.current = null;
+      selectionCurrentRef.current = null;
+      setSelectionTick(0);
+      if (start && current && wrapRef.current && pageDimensions) {
+        const s = screenToPDF(start.x, start.y);
+        const c = screenToPDF(current.x, current.y);
+        const selBox = {
+          x0: Math.min(s.x, c.x),
+          y0: Math.min(s.y, c.y),
+          x1: Math.max(s.x, c.x),
+          y1: Math.max(s.y, c.y),
+        };
+        if (selBox.x1 - selBox.x0 > 3 && selBox.y1 - selBox.y0 > 3) {
+          const hit = visibleComponents.filter((c) => overlaps(c, selBox));
+          if (hit.length > 0) setSelectedComponents(hit);
+        }
+      }
+      return;
+    }
     isPanning.current = false;
     e.currentTarget.style.cursor = "grab";
   }
 
   function handleMouseLeave(e) {
+    if (isSelecting.current) {
+      isSelecting.current = false;
+      selectionStartRef.current = null;
+      selectionCurrentRef.current = null;
+      setSelectionTick(0);
+      return;
+    }
     isPanning.current = false;
     e.currentTarget.style.cursor = "grab";
   }
@@ -318,7 +391,11 @@ export default function DrawingViewer({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
         onDoubleClick={handleDoubleClick}
-        onClick={() => setSelectedBox(null)}
+        onClick={(e) => {
+          if (e.shiftKey) return;
+          setSelectedBox(null);
+          setSelectedComponents([]);
+        }}
       >
         {/* Transformed layer — zoom + pan applied here */}
         <div
@@ -347,7 +424,10 @@ export default function DrawingViewer({
                     (!highlightCode ||
                       c.base_code === highlightCode ||
                       c.code === highlightCode);
-                  const isSelected = selectedBox === `det-${i}`;
+                  const isSelected = selectedComponents.some(
+                    (s) => s.x0 === c.x0 && s.y0 === c.y0,
+                  );
+                  const isSingleSelected = selectedBox === `det-${i}`;
                   return (
                     <div
                       key={`det-${i}`}
@@ -357,18 +437,24 @@ export default function DrawingViewer({
                         opacity: isActive ? 1 : 0.15,
                         outline: isSelected
                           ? "2px solid var(--red)"
-                          : undefined,
+                          : isSingleSelected
+                            ? "2px solid var(--red)"
+                            : undefined,
                         cursor: "pointer",
                       }}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => {
+                        if (!e.shiftKey) e.stopPropagation();
+                      }}
                       onClick={(e) => {
+                        if (e.shiftKey) return;
                         e.stopPropagation();
-                        setSelectedBox(isSelected ? null : `det-${i}`);
+                        setSelectedBox(isSingleSelected ? null : `det-${i}`);
+                        setSelectedComponents([]);
                       }}
                       onMouseEnter={() => setHoveredBox({ index: `det-${i}` })}
                       onMouseLeave={() => setHoveredBox(null)}
                     >
-                      {isSelected && onRemoveComponent ? (
+                      {(isSelected || isSingleSelected) && onRemoveComponent ? (
                         <button
                           style={{
                             position: "absolute",
@@ -395,13 +481,18 @@ export default function DrawingViewer({
                             e.stopPropagation();
                             onRemoveComponent(c);
                             setSelectedBox(null);
+                            setSelectedComponents((prev) =>
+                              prev.filter(
+                                (s) => !(s.x0 === c.x0 && s.y0 === c.y0),
+                              ),
+                            );
                           }}
                         >
                           ×
                         </button>
                       ) : (
                         hoveredBox?.index === `det-${i}` &&
-                        !isSelected && (
+                        !isSingleSelected && (
                           <div className="highlight-tooltip">
                             {c.raw_text !== c.code
                               ? `${c.raw_text} → ${c.code}`
@@ -412,6 +503,39 @@ export default function DrawingViewer({
                     </div>
                   );
                 })}
+
+                {/* Shift+drag selection box — reads from refs, re-renders via selectionTick */}
+                {selectionTick >= 0 &&
+                  isSelecting.current &&
+                  selectionStartRef.current &&
+                  selectionCurrentRef.current &&
+                  (() => {
+                    const s = screenToPDF(
+                      selectionStartRef.current.x,
+                      selectionStartRef.current.y,
+                    );
+                    const c = screenToPDF(
+                      selectionCurrentRef.current.x,
+                      selectionCurrentRef.current.y,
+                    );
+                    return (
+                      <div
+                        style={{
+                          ...toStyle(
+                            Math.min(s.x, c.x),
+                            Math.min(s.y, c.y),
+                            Math.max(s.x, c.x),
+                            Math.max(s.y, c.y),
+                          ),
+                          position: "absolute",
+                          border: "2px dashed var(--red)",
+                          background: "rgba(255,80,80,0.08)",
+                          pointerEvents: "none",
+                          zIndex: 20,
+                        }}
+                      />
+                    );
+                  })()}
 
                 {/* Warnings */}
                 {visibleWarnings.map((w, i) => (
@@ -457,6 +581,63 @@ export default function DrawingViewer({
           </div>
         </div>
       </div>
+
+      {/* Floating multi-delete button — shown when shift+drag selects components */}
+      {selectedComponents.length > 0 && onRemoveComponents && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "var(--bg-2)",
+            border: "1px solid var(--red)",
+            borderRadius: "var(--radius)",
+            padding: "8px 14px",
+            zIndex: 30,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontFamily: "var(--font-mono)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {selectedComponents.length}{" "}
+            {selectedComponents.length === 1
+              ? "markering vald"
+              : "markeringar valda"}
+          </span>
+          <button
+            className="btn"
+            style={{
+              fontSize: 11,
+              background: "var(--red)",
+              color: "#fff",
+              border: "none",
+              padding: "4px 14px",
+            }}
+            onClick={() => {
+              onRemoveComponents(selectedComponents);
+              setSelectedComponents([]);
+            }}
+          >
+            Ta bort
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 11, padding: "4px 10px" }}
+            onClick={() => setSelectedComponents([])}
+          >
+            Avbryt
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   getScanResult,
   addManualItem,
   getManualItems,
+  deleteManualItem,
   clearDrawingData,
   saveBatchResult,
   getBatchResult,
@@ -364,7 +365,7 @@ export default function App() {
               ...row,
               breakdown: newBreakdown,
               components: newComponents,
-              total: row.total + 1,
+              total: sumBreakdown(newBreakdown),
             },
           },
         };
@@ -375,6 +376,14 @@ export default function App() {
         return updated;
       });
     }
+  }
+
+  // Derives total from breakdown — always accurate regardless of arithmetic drift.
+  function sumBreakdown(breakdown) {
+    return Object.values(breakdown || {}).reduce(
+      (s, variants) => s + Object.values(variants).reduce((a, b) => a + b, 0),
+      0,
+    );
   }
 
   // Merges a new batch scan into the existing batchState.
@@ -454,7 +463,53 @@ export default function App() {
       progress: newScan.progress,
       currentFile: "",
       results: mergedResults,
+      removedInstances: existing.removedInstances || {},
+      kalkylData: existing.kalkylData || {},
     };
+  }
+
+  // After merging, subtract any previously removed instances from breakdown/total.
+  // This keeps counts correct when re-scanning a code that had deletions.
+  function applyRemovedInstances(batchState) {
+    if (!batchState?.removedInstances || !batchState?.results)
+      return batchState;
+    const newResults = { ...batchState.results };
+    for (const [drawingId, row] of Object.entries(newResults)) {
+      const removed = batchState.removedInstances[drawingId] || [];
+      if (removed.length === 0) continue;
+
+      // Find which instances in the components array were removed
+      const removedComps = (row.components || []).filter((c) =>
+        removed.some((r) => r.x0 === c.x0 && r.y0 === c.y0),
+      );
+      if (removedComps.length === 0) continue;
+
+      const filteredComponents = (row.components || []).filter(
+        (c) => !removed.some((r) => r.x0 === c.x0 && r.y0 === c.y0),
+      );
+
+      // Subtract each removed instance from the breakdown
+      const newBreakdown = JSON.parse(JSON.stringify(row.breakdown || {}));
+      for (const c of removedComps) {
+        for (const [searchCode, variants] of Object.entries(newBreakdown)) {
+          if (c.code in variants) {
+            variants[c.code]--;
+            if (variants[c.code] <= 0) delete variants[c.code];
+            if (Object.keys(variants).length === 0)
+              delete newBreakdown[searchCode];
+            break;
+          }
+        }
+      }
+
+      newResults[drawingId] = {
+        ...row,
+        components: filteredComponents,
+        breakdown: newBreakdown,
+        total: filteredComponents.length,
+      };
+    }
+    return { ...batchState, results: newResults };
   }
 
   async function handleBatchScan(drawingIds, codes) {
@@ -541,8 +596,11 @@ export default function App() {
       results,
     };
 
-    // Merge into pre-scan state so previous searches accumulate
-    const merged = mergeBatchState(preScanBatchState, newScan);
+    // Merge into pre-scan state so previous searches accumulate,
+    // then re-apply removedInstances so deleted markers stay out of counts
+    const merged = applyRemovedInstances(
+      mergeBatchState(preScanBatchState, newScan),
+    );
     setBatchState(merged);
 
     // If the currently selected drawing was part of this scan, refresh its
@@ -715,10 +773,62 @@ export default function App() {
     };
     setKalkylData(updated);
     if (selectedProject && batchState) {
-      saveBatchResult(selectedProject.id, {
-        ...batchState,
-        kalkylData: updated,
-      }).catch(() => {});
+      const updatedBatchState = { ...batchState, kalkylData: updated };
+      setBatchState(updatedBatchState);
+      saveBatchResult(selectedProject.id, updatedBatchState).catch(() => {});
+    }
+  }
+
+  async function handleRemoveManualItem(item) {
+    // Delete from DB
+    if (item.id && selectedDrawing) {
+      try {
+        await deleteManualItem(selectedDrawing.id, item.id);
+      } catch {
+        /* non-critical */
+      }
+    }
+    // Remove from local state
+    setManualItems((prev) => prev.filter((m) => m.id !== item.id));
+
+    // Update batchState breakdown/total and persist
+    if (selectedDrawing && batchState?.results) {
+      setBatchState((prev) => {
+        if (!prev?.results) return prev;
+        const drawingId = selectedDrawing.id;
+        const row = prev.results[drawingId];
+        if (!row) return prev;
+
+        const newBreakdown = { ...row.breakdown };
+        if (newBreakdown[item.base_code]) {
+          newBreakdown[item.base_code] = { ...newBreakdown[item.base_code] };
+          newBreakdown[item.base_code][item.code] =
+            (newBreakdown[item.base_code][item.code] || 1) - 1;
+          if (newBreakdown[item.base_code][item.code] <= 0)
+            delete newBreakdown[item.base_code][item.code];
+          if (Object.keys(newBreakdown[item.base_code]).length === 0)
+            delete newBreakdown[item.base_code];
+        }
+        const newComponents = (row.components || []).filter(
+          (c) =>
+            !(c.code === item.code && c.x0 === item.x0 && c.y0 === item.y0),
+        );
+        const updated = {
+          ...prev,
+          results: {
+            ...prev.results,
+            [drawingId]: {
+              ...row,
+              breakdown: newBreakdown,
+              components: newComponents,
+              total: sumBreakdown(newBreakdown),
+            },
+          },
+        };
+        if (selectedProject)
+          saveBatchResult(selectedProject.id, updated).catch(() => {});
+        return updated;
+      });
     }
   }
 
@@ -786,7 +896,79 @@ export default function App() {
             ...row,
             breakdown: newBreakdown,
             components: newComponents,
-            total: row.total - 1,
+            total: sumBreakdown(newBreakdown),
+          },
+        },
+      };
+      if (selectedProject)
+        saveBatchResult(selectedProject.id, updated).catch(() => {});
+      return updated;
+    });
+  }
+
+  function handleRemoveComponents(components) {
+    const drawingId = selectedDrawing?.id;
+    if (!drawingId || !components.length) return;
+
+    // Remove all from scanResult in one pass
+    setScanResult((prev) => {
+      if (!prev) return prev;
+      const newComponents = { ...prev.components };
+      for (const c of components) {
+        if (newComponents[c.base_code]) {
+          newComponents[c.base_code] = newComponents[c.base_code].filter(
+            (inst) => !(inst.x0 === c.x0 && inst.y0 === c.y0),
+          );
+          if (newComponents[c.base_code].length === 0)
+            delete newComponents[c.base_code];
+        }
+      }
+      return {
+        ...prev,
+        total_found: prev.total_found - components.length,
+        components: newComponents,
+      };
+    });
+
+    // Remove all from batchState and persist once
+    setBatchState((prev) => {
+      if (!prev?.results) return prev;
+      const row = prev.results[drawingId];
+      if (!row) return prev;
+
+      let newBreakdown = { ...row.breakdown };
+      let newCompList = [...(row.components || [])];
+      const newRemoved = [...(prev.removedInstances?.[drawingId] || [])];
+
+      for (const c of components) {
+        if (newBreakdown[c.base_code]) {
+          newBreakdown[c.base_code] = { ...newBreakdown[c.base_code] };
+          newBreakdown[c.base_code][c.code] =
+            (newBreakdown[c.base_code][c.code] || 1) - 1;
+          if (newBreakdown[c.base_code][c.code] <= 0)
+            delete newBreakdown[c.base_code][c.code];
+          if (Object.keys(newBreakdown[c.base_code]).length === 0)
+            delete newBreakdown[c.base_code];
+        }
+        newCompList = newCompList.filter(
+          (inst) => !(inst.x0 === c.x0 && inst.y0 === c.y0),
+        );
+        newRemoved.push({ x0: c.x0, y0: c.y0 });
+      }
+
+      const updated = {
+        ...prev,
+        removedInstances: {
+          ...(prev.removedInstances || {}),
+          [drawingId]: newRemoved,
+        },
+        results: {
+          ...prev.results,
+          [drawingId]: {
+            ...row,
+            breakdown: newBreakdown,
+            components: newCompList,
+            total: sumBreakdown(newBreakdown),
           },
         },
       };
@@ -809,11 +991,9 @@ export default function App() {
     <>
       <div className="app-shell">
         <header className="topbar">
-          <a href="/app" style={{ textDecoration: "none" }}>
-            <span className="topbar-logo">
-              KALKYL<span>PAL</span>
-            </span>
-          </a>
+          <span className="topbar-logo">
+            KALKYL<span>PAL</span>
+          </span>
           <div className="topbar-sep" />
           <span className="topbar-sub">Din Kalkyl Kompis</span>
           {batchState?.results && (
@@ -925,6 +1105,7 @@ export default function App() {
                 onNextDrawing={handleNextDrawing}
                 onOpenChat={() => setSelectedDrawing(null)}
                 onRemoveComponent={handleRemoveComponent}
+                onRemoveComponents={handleRemoveComponents}
                 hasPrevDrawing={(() => {
                   const d = selectedProject?.drawings || [];
                   const i = d.findIndex((x) => x.id === selectedDrawing?.id);
@@ -969,6 +1150,7 @@ export default function App() {
               onResetAll={handleResetAll}
               onResetProject={selectedProject ? handleResetProject : null}
               onDismissWarning={handleDismissWarning}
+              onRemoveManualItem={handleRemoveManualItem}
             />
           </>
         ) : (

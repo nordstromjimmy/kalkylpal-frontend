@@ -136,7 +136,7 @@ export default function BatchScanSection({
     if (!batchState?.results) return;
     const rows = Object.entries(batchState.results);
     const summary = buildSummary(rows);
-    const grandTotal = rows.reduce((s, [, r]) => s + r.total, 0);
+    const grandTotal = rows.reduce((s, [, r]) => s + rowTotal(r), 0);
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.width;
     let y = 18;
@@ -166,7 +166,7 @@ export default function BatchScanSection({
       doc.rect(14, y - 4, pw - 28, 8, "F");
       doc.setTextColor(255);
       doc.text(row.filename, 16, y + 1);
-      doc.text(`${row.total} st`, pw - 16, y + 1, { align: "right" });
+      doc.text(`${rowTotal(row)} st`, pw - 16, y + 1, { align: "right" });
       doc.setTextColor(0);
       y += 10;
 
@@ -227,6 +227,13 @@ export default function BatchScanSection({
     });
 
     doc.save(`${projectName}_komponenter.pdf`);
+  }
+
+  function rowTotal(row) {
+    return Object.values(row.breakdown || {}).reduce(
+      (s, variants) => s + Object.values(variants).reduce((a, b) => a + b, 0),
+      0,
+    );
   }
 
   function buildSummary(rows) {
@@ -296,7 +303,7 @@ export default function BatchScanSection({
           <div>
             <div
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 color: "var(--text-dim)",
                 fontFamily: "var(--font-mono)",
                 marginBottom: 4,
@@ -463,7 +470,10 @@ export default function BatchScanSection({
           {hasResults &&
             (() => {
               const allRows = Object.entries(batchState.results);
-              const grandTotal = allRows.reduce((s, [, r]) => s + r.total, 0);
+              const grandTotal = allRows.reduce(
+                (s, [, r]) => s + rowTotal(r),
+                0,
+              );
               const summary = buildSummary(allRows);
               const sortedVariants = Object.keys(summary).sort();
 
@@ -643,7 +653,7 @@ export default function BatchScanSection({
                                 marginLeft: 8,
                               }}
                             >
-                              {row.total} st
+                              {rowTotal(row)} st
                             </span>
                           </div>
 
