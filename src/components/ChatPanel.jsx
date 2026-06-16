@@ -71,7 +71,7 @@ export default function ChatPanel({ projectId, projectName }) {
         <div style={styles.headerLeft}>
           <span style={styles.headerIcon}>💬</span>
           <div>
-            <div style={styles.headerTitle}>AI-assistent</div>
+            <div style={styles.headerTitle}>KalkylPalAI</div>
             <div style={styles.headerSub}>
               Ställ frågor om komponenter, installation och dimensionering
             </div>

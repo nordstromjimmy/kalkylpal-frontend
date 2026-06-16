@@ -82,7 +82,7 @@ export default function LoginPage() {
               e.currentTarget.style.background = "transparent";
             }}
           >
-            {loading ? "Loggar in…" : "Logga in →"}
+            {loading ? "Loggar in…" : "Logga in"}
           </button>
         </form>
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
             (e.currentTarget.style.color = "rgba(255,255,255,0.2)")
           }
         >
-          ← Tillbaka
+          Tillbaka
         </button>
       </div>
     </div>
